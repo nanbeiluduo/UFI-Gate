@@ -108,3 +108,43 @@ jobs:
             dist/build-info.json \
             dist/SHA256SUMS
           gh release edit "$tag" --draft=false --prerelease
+
+      - name: Sync README version references and commit back to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.ver.outputs.tag }}"
+          version="${{ steps.ver.outputs.version }}"
+          python3 - <<'PY'
+          import re, pathlib, sys
+          tag = "${{ steps.ver.outputs.tag }}"
+          version = "${{ steps.ver.outputs.version }}"
+          readme = pathlib.Path("README.md")
+          text = readme.read_text(encoding="utf-8")
+
+          # 1. 当前版本：`old` -> `new`
+          text, n1 = re.subn(r'(当前版本：`)[^`]+(`)', rf'\g<1>{version}\g<2>', text, count=1)
+          # 2. 下载表格里的 UFI-Gate-old-armXX.js -> UFI-Gate-new-armXX.js
+          text, n2 = re.subn(r'UFI-Gate-\d+\.\d+\.\d+-(arm32|arm64)\.js', rf'UFI-Gate-{version}-\1.js', text)
+          # 3. 版本记录表：在 | --- | 分隔行后插入新行（取 release notes 第一段作为描述）
+          notes = pathlib.Path(f"docs/releases/{tag}.md").read_text(encoding="utf-8").splitlines()
+          summary = next((ln.strip() for ln in notes if ln.strip() and not ln.startswith('#')), "")
+          summary = summary.rstrip('。')
+          if f"| `{version}` |" not in text:
+              row = f"| `{version}` | {summary}。[详情](docs/releases/{tag}.md) |\n"
+              text, n3 = re.subn(r'(\| --- \|\n)', r'\1' + row, text, count=1)
+          else:
+              text, n3 = text, 1
+
+          readme.write_text(text, encoding="utf-8", newline="\n")
+          print(f"replaced: current_version={n1} download_links={n2} added_row={n3}")
+          if n1 == 0 or n3 == 0:
+              sys.exit("README sync pattern not matched; inspect README manually")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: sync README to $tag [skip ci]"
+            git push
+          fi
