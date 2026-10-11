@@ -1,14 +1,13 @@
-# UFI-Gate
-
 <div align="center">
 
 # UFI-Gate
 
 WiFi Captive Portal · 设备准入 · 流量配额
 
-![banner]([https://你的图片地址.png](https://github.com/nanbeiluduo/UFI-Gate/blob/main/images/banner.png))
+![banner](https://github.com/nanbeiluduo/UFI-Gate/raw/main/images/banner.png)
 
 </div>
+
 
 为 [UFI-TOOLS](https://github.com/kanoqwq/UFI-TOOLS/tree/http-server-version) 随身 WiFi 提供网页认证、设备准入与流量配额管理。
 
