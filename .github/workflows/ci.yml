@@ -12,7 +12,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -29,8 +29,19 @@ jobs:
           node --check tests/ui-test.cjs
           sh -n service.sh
           sh -n emergency-recover.sh
-      - name: Build and verify ARM64 plugin
+      - name: Build and verify ARM32 and ARM64 plugins
         run: |
           python3 build.py --out dist
-          node --check dist/UFI-Gate-1.0.0-beta.1-arm64.js
+          for f in dist/UFI-Gate-*-arm32.js dist/UFI-Gate-*-arm64.js; do node --check "$f"; done
+          node tests/installer-test.cjs dist
           python3 scripts/package_release.py --out dist
+      - name: Execute ARM32 and ARM64 tests under QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7,softfloat go test -mod=vendor -c -o dist/tests-arm32 .
+          qemu-arm dist/tests-arm32 -test.v
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go test -mod=vendor -c -o dist/tests-arm64 .
+          qemu-aarch64 dist/tests-arm64 -test.v
+          qemu-arm dist/ufi-gate-arm32 -h
+          qemu-aarch64 dist/ufi-gate-arm64 -h
