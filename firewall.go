@@ -104,12 +104,14 @@ func (f *Firewall) newChain(table, name string) error {
 	return nil
 }
 func (f *Firewall) init(lan string) error {
+	// Never flush Android's built-in chains. Own all chains/hooks under UFIG_ prefix.
 	for _, p := range [][2]string{{"filter", "UFIG_F"}, {"filter", "UFIG_I"}, {"filter", "UFIG_FA"}, {"filter", "UFIG_FB"}, {"filter", "UFIG_IA"}, {"filter", "UFIG_IB"}, {"nat", "UFIG_N"}, {"nat", "UFIG_NA"}, {"nat", "UFIG_NB"}, {"mangle", "UFIG_C"}} {
 		if e := f.newChain(p[0], p[1]); e != nil {
 			f.cleanup()
 			return e
 		}
 	}
+	// Default-drop roots protect the short policy-build interval.
 	for _, c := range []string{"UFIG_F", "UFIG_I"} {
 		if e := f.ip("filter", "-A", c, "-j", "DROP"); e != nil {
 			return e
@@ -129,6 +131,7 @@ func (f *Firewall) init(lan string) error {
 	if e := f.ip("nat", "-I", "PREROUTING", "1", "-i", lan, "-j", "UFIG_N"); e != nil {
 		return e
 	}
+	// POSTROUTING sees packets after every FORWARD filter, before SNAT. Rejected/limited packets never reach our counters.
 	if e := f.ip("mangle", "-I", "POSTROUTING", "1", "-j", "UFIG_C"); e != nil {
 		return e
 	}
@@ -181,7 +184,7 @@ func (g *Gate) reconcile() (result error) {
 	if c.OffloadOriginal == "" {
 		out, e := realRun("settings", "get", "global", "tether_offload_disabled")
 		if e != nil {
-			return errors.New("无法读取 tether offload 状态: "+e.Error())
+			return errors.New("无法读取 tether offload 状态: " + e.Error())
 		}
 		c.OffloadOriginal = strings.TrimSpace(out)
 		if c.OffloadOriginal == "" {
@@ -208,6 +211,7 @@ func (g *Gate) reconcile() (result error) {
 	}
 	g.sampleBlocks()
 	g.blockCounters = map[string]uint64{}
+	// Build an inactive complete chain then swap the root's first rule. Existing policies never become empty.
 	next := 1 - f.side
 	suffix := "A"
 	if next == 1 {
@@ -223,9 +227,11 @@ func (g *Gate) reconcile() (result error) {
 		return f.ip(table, append([]string{"-A", chain}, a...)...)
 	}
 	accept := func(args ...string) error {
+		// Permit through our gate, then return to Android's original FORWARD chain so native/other-plugin restrictions still apply.
 		return add("filter", fc, append(append([]string{}, args...), "-j", "RETURN")...)
 	}
 	devices := sortedDevices(g)
+	// Quota and bans have priority over white lists and established connections.
 	for _, d := range devices {
 		if d.Banned || g.state(d) == "quota" {
 			if e = add("nat", nc, "-s", d.IP, "-m", "mac", "--mac-source", d.MAC, "-p", "tcp", "--dport", "80", "-j", "REDIRECT", "--to-ports", "8090"); e != nil {
@@ -239,6 +245,7 @@ func (g *Gate) reconcile() (result error) {
 			}
 		}
 	}
+	// Blacklisted names resolve to the gateway; catch their HTTP requests before authorized-device exemptions.
 	if e = add("nat", nc, "-d", c.Gateway, "-p", "tcp", "--dport", "80", "-j", "REDIRECT", "--to-ports", "8090"); e != nil {
 		return e
 	}
@@ -285,6 +292,7 @@ func (g *Gate) reconcile() (result error) {
 			return e
 		}
 	}
+	// Prevent routing into adjacent private networks. Whitelisted private servers remain reachable via the explicit rules above.
 	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"} {
 		if e = add("filter", fc, "-i", c.LAN, "-d", cidr, "-j", "DROP"); e != nil {
 			return e
@@ -294,6 +302,7 @@ func (g *Gate) reconcile() (result error) {
 		if !g.allowed(d) {
 			continue
 		}
+
 		if e = accept("-i", c.LAN, "-s", d.IP, "-m", "mac", "--mac-source", d.MAC); e != nil {
 			return e
 		}
@@ -304,11 +313,13 @@ func (g *Gate) reconcile() (result error) {
 	if e = add("filter", fc, "-m", "comment", "--comment", "ug:blocked", "-j", "DROP"); e != nil {
 		return e
 	}
+	// Portal and DNS are local. Only the installation device can reach admin and UFI's original control plane through hotspot INPUT.
 	for _, a := range [][]string{{"-p", "udp", "--dport", "67", "-j", "ACCEPT"}, {"-p", "udp", "--dport", "5354", "-j", "ACCEPT"}, {"-p", "tcp", "--dport", "5354", "-j", "ACCEPT"}, {"-p", "tcp", "--dport", "8090", "-j", "ACCEPT"}, {"-m", "mac", "--mac-source", c.AdminMAC, "-j", "ACCEPT"}, {"-j", "DROP"}} {
 		if e = add("filter", ic, a...); e != nil {
 			return e
 		}
 	}
+	// DNS is always intercepted; authenticated devices get real answers except for blacklisted names.
 	for _, proto := range []string{"udp", "tcp"} {
 		if e = add("nat", nc, "-p", proto, "--dport", "53", "-j", "REDIRECT", "--to-ports", "5354"); e != nil {
 			return e
@@ -329,6 +340,7 @@ func (g *Gate) reconcile() (result error) {
 	if e = add("nat", nc, "-p", "tcp", "--dport", "80", "-j", "REDIRECT", "--to-ports", "8090"); e != nil {
 		return e
 	}
+	// 443 is dropped by FORWARD. Redirecting TLS to HTTP would produce certificate errors, not a valid captive portal.
 	if e = f.ip("filter", "-R", "UFIG_F", "1", "-j", fc); e != nil {
 		return e
 	}
@@ -396,6 +408,7 @@ func (f *Firewall) cleanup() error {
 		return nil
 	}
 	var failures []string
+	// Enumerate only our jumps; interface name may have changed since last boot.
 	for _, table := range []string{"filter", "nat", "mangle"} {
 		out, e := f.runner("iptables", "-w", "3", "-t", table, "-S")
 		if e != nil {
@@ -621,6 +634,7 @@ func (g *Gate) discover() bool {
 			}
 		}
 	}
+	// Revoke stale IP rules immediately if DHCP moved that address to a different MAC.
 	for _, d := range g.db.Devices {
 		if owner, ok := seen[d.IP]; ok && owner != d.MAC {
 			d.IP = ""
@@ -735,6 +749,7 @@ func (g *Gate) watchHost() {
 				enabled = enabled || !strings.Contains(m[1], "[kano_disabled]")
 			}
 		}
+		// Older hosts may use raw script text without wrappers.
 		if !found && strings.Contains(v.Text, "UFI_GATE_PLUGIN_ID_v1") {
 			enabled = !strings.Contains(v.Text, "[kano_disabled]")
 		}
