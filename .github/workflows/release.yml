@@ -1,0 +1,59 @@
+name: Publish beta release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v1.0.0-beta.1
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.24.2'
+          cache: false
+      - name: Tests and checks
+        run: |
+          go test -mod=vendor -race ./...
+          go vet -mod=vendor ./...
+          node --check web/admin.js
+          node --check web/portal.js
+          sh -n service.sh
+          sh -n emergency-recover.sh
+      - name: Build release attachments
+        run: |
+          python3 build.py --out dist
+          node --check dist/UFI-Gate-1.0.0-beta.1-arm64.js
+          python3 scripts/package_release.py --out dist
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=v1.0.0-beta.1
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo 'This version already exists. Refusing to overwrite it.' >&2
+            exit 1
+          fi
+          gh release create "$tag" \
+            --target "$RELEASE_COMMIT" \
+            --title 'UFI-Gate v1.0.0-beta.1 · 首个开发测试版' \
+            --notes-file docs/releases/v1.0.0-beta.1.md \
+            --prerelease --draft
+          gh release upload "$tag" \
+            dist/UFI-Gate-1.0.0-beta.1-arm64.js \
+            dist/UFI-Gate-1.0.0-beta.1-source.zip \
+            dist/build-info.json \
+            dist/SHA256SUMS
+          gh release edit "$tag" --draft=false --prerelease

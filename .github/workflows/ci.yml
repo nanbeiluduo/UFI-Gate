@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.24.2'
+          cache: false
+      - name: Tests and race detector
+        run: go test -mod=vendor -race ./...
+      - name: Static checks
+        run: |
+          go vet -mod=vendor ./...
+          node --check web/admin.js
+          node --check web/portal.js
+          node --check tests/ui-test.cjs
+          sh -n service.sh
+          sh -n emergency-recover.sh
+      - name: Build and verify ARM64 plugin
+        run: |
+          python3 build.py --out dist
+          node --check dist/UFI-Gate-1.0.0-beta.1-arm64.js
+          python3 scripts/package_release.py --out dist

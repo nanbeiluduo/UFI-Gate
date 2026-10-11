@@ -1,0 +1,11 @@
+/dist/
+/demo-state/
+/ufi-gate-demo
+/ufi-gate-arm64
+/ufi-gate-arm64.gz
+/node_modules/
+/package-lock.json
+/tests/screenshots/
+__pycache__/
+*.pyc
+.DS_Store

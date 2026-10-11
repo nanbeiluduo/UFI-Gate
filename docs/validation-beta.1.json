@@ -1,0 +1,28 @@
+{
+  "release": "1.0.0-beta.1",
+  "go_tests": 21,
+  "race_check": "passed",
+  "go_vet": "passed",
+  "js_shell_syntax": "passed",
+  "ui_panels": 30,
+  "ui_widths": [
+    390,
+    834,
+    1440
+  ],
+  "browser_errors": 0,
+  "installer_gzip_sha256_arm64_check": "passed",
+  "actual_device_test": "pending",
+  "actual_push_delivery_test": "pending",
+  "scope": "IPv4 hotspot admission; IPv6 blocked when active; domain filtering is best effort",
+  "build": {
+    "version": "1.0.0-beta.1",
+    "arch": "linux-arm64-static",
+    "go": "go version go1.24.2 linux/amd64",
+    "plugin_bytes": 3618553,
+    "binary_bytes": 6684820,
+    "compressed_bytes": 2702042,
+    "plugin_sha256": "819d8f499e435d5b8d3be28b74ea56eac51f9f747fb40a2505f9c653b3b5573a",
+    "binary_sha256": "3438c4c3d6353d750583df191836fa19929cdb7881c76ef92e1f848c660a3ef0"
+  }
+}
