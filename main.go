@@ -183,3 +183,16 @@ func atomicWrite(p string, b []byte) error {
 	}
 	return os.Rename(p+".tmp", p)
 }
+func (g *Gate) save() error {
+	b, e := json.MarshalIndent(g.db, "", "  ")
+	if e != nil {
+		return e
+	}
+	return atomicWrite(filepath.Join(dir, "state.json"), b)
+}
+func (g *Gate) event(k, m string) {
+	g.db.Logs = append(g.db.Logs, Event{time.Now().Unix(), k, m})
+	if len(g.db.Logs) > 500 {
+		g.db.Logs = g.db.Logs[len(g.db.Logs)-500:]
+	}
+}
