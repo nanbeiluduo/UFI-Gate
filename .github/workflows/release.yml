@@ -100,7 +100,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "UFI-Gate $tag" \
             --notes-file "docs/releases/${tag}.md" \
-            --prerelease --draft
+            --draft
           gh release upload "$tag" \
             "dist/UFI-Gate-${version}-arm32.js" \
             "dist/UFI-Gate-${version}-arm64.js" \
