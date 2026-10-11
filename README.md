@@ -4,7 +4,7 @@
 
 开放热点连接后，访客先完成认证，再获得上网许可。管理后台独立运行，采用 Fluent / WinUI 3 视觉风格，适配手机、平板和电脑。
 
-**当前版本：`1.0.2`。** 已在中兴 MU3351 / V50 真机完成：管理后台、认证下发、新设备自动弹窗、远程踢人下线的端到端验证。
+**当前版本：`1.0.3`。** 插件安装器移除与宿主重复的热点改写按钮，SSID/加密/AP 隔离统一在 UFI-Tools 原生 WiFi 页面设置。已在中兴 MU3351 / V50（`armv8l`）真机完成：管理后台、认证下发、新设备自动弹窗、远程踢人下线的端到端验证。
 
 ## 下载与安装
 
@@ -14,8 +14,8 @@
 
 | 输出 | 下载文件 |
 | --- | --- |
-| `armv7l` / `armv8l` | `UFI-Gate-1.0.2-arm32.js` |
-| `aarch64` / `arm64` | `UFI-Gate-1.0.2-arm64.js` |
+| `armv7l` / `armv8l` | `UFI-Gate-1.0.3-arm32.js` |
+| `aarch64` / `arm64` | `UFI-Gate-1.0.3-arm64.js` |
 
 ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的动态链接器或硬浮点支持；要求 ARMv7 或更高的 32 位执行环境。`armv8l` 应选择 ARM32 包，不能通过跳过架构检测运行 ARM64 二进制。其他架构会在写入服务前被拒绝。
 
@@ -28,7 +28,7 @@ ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的�
 1. 登录 UFI-TOOLS，在插件管理中导入 `.js`，保存并刷新。
 2. 打开“UFI-Gate 网闸”，检测环境，核对热点接口和网关（中兴设备桥接口为 `br0`，网关 `192.168.0.1`），安装服务。
 3. 打开独立后台（默认 `http://192.168.0.1:8081`），初始化管理员账号，配置认证方式、上网账号、配额与推送。
-4. 保留 Root Shell 或 ADB 恢复通道，开启认证，将热点设为 OPEN，并启用、验证 AP 隔离。
+4. 保留 Root Shell 或 ADB 恢复通道，在 UFI-Tools 宿主 WiFi 管理中将热点设为 OPEN/NONE，并启用、验证 AP 隔离。
 5. 用第二台未受信任的设备完成真机验收，再开放给访客。
 
 > 提示：新连入的设备若没自动弹出认证页，多半是系统把该网络记成了“已验证”。在手机上「忽略此网络」后重新连接即可触发门户探测。
@@ -68,7 +68,7 @@ ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的�
 - 流量每 5 秒采样，包含 IP 开销与重传，可能超过配额一个采样窗口；不是运营商计费账本。限速通过字节型 hashlimit 丢包实现。
 - 远程审批地址需经 VPN 或 HTTPS 隧道可达；机器人 Webhook 或邮件不会自动让内网设备暴露到公网。
 - 远程踢人依赖 hostapd 控制 socket；在没有 hostapd_cli 的设备上由守护进程直连 unix socket，找不到控制口时仅记日志、不影响后台操作。
-- 停止或恢复后恢复原始网络准入；如果热点已设为 OPEN，需要另行恢复热点密码。
+- 停止或恢复后由本插件恢复网络准入规则；热点的 SSID、加密方式与 AP 隔离由你在 UFI-Tools 宿主 WiFi 管理中维护，插件不再代为改写或回滚。
 
 这些限制及第三方服务配置详见 [安装与管理指南](docs/INSTALL.md#实现与边界)。
 
@@ -117,6 +117,7 @@ node tests/ui-test.cjs
 
 | 版本 | 说明 |
 | --- | --- |
+| `1.0.3` | 插件安装器移除"热点设为 OPEN / 恢复热点配置"按钮，热点参数统一交回 UFI-Tools 原生 WiFi 管理；按钮分组重排。[详情](docs/releases/v1.0.3.md) |
 | `1.0.2` | 认证门户 8080→8090 避开中兴官方后台占用；新增 hostapd DEAUTH 远程踢人。[详情](docs/releases/v1.0.2.md) |
 | `1.0.1` | 首版：网页认证、设备准入、流量配额、审批推送。[详情](docs/releases/v1.0.1.md) |
 
@@ -135,10 +136,10 @@ GitHub Actions 对推送和 PR 运行逻辑与语法检查。
 | `docs/` | 安装指南、测试记录与版本说明 |
 | `scripts/` | Release 打包与校验 |
 
-## 许可与致谢
-
-原创代码按 [MIT License](LICENSE) 提供。`vendor/` 内的 Go 密码库按其原有许可证分发。感谢 [UFI-TOOLS](https://github.com/kanoqwq/UFI-TOOLS) 提供宿主接口；本项目是独立插件，与上游不存在官方隶属关系。
-
 ## 联系
 
 有问题、建议或真机兼容反馈，欢迎通过 Telegram 联系：[@nanbeiluduo](https://t.me/nanbeiluduo)
+
+## 许可与致谢
+
+原创代码按 [MIT License](LICENSE) 提供。`vendor/` 内的 Go 密码库按其原有许可证分发。感谢 [UFI-TOOLS](https://github.com/kanoqwq/UFI-TOOLS) 提供宿主接口；本项目是独立插件，与上游不存在官方隶属关系。
