@@ -1,5 +1,15 @@
 # UFI-Gate
 
+<div align="center">
+
+# UFI-Gate
+
+WiFi Captive Portal · 设备准入 · 流量配额
+
+![banner]([https://你的图片地址.png](https://github.com/nanbeiluduo/UFI-Gate/blob/main/images/banner.png))
+
+</div>
+
 为 [UFI-TOOLS](https://github.com/kanoqwq/UFI-TOOLS/tree/http-server-version) 随身 WiFi 提供网页认证、设备准入与流量配额管理。
 
 开放热点连接后，访客先完成认证，再获得上网许可。管理后台独立运行，采用 Fluent / WinUI 3 视觉风格，适配手机、平板和电脑。
