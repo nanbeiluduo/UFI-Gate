@@ -37,7 +37,7 @@ ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的�
 1. 登录 UFI-TOOLS，在插件管理中导入 `.js`，保存并刷新。
 2. 打开“UFI-Gate 网闸”，检测环境，核对热点接口和网关（中兴设备桥接口为 `br0`，网关 `192.168.0.1`），安装服务。
 3. 打开独立后台（默认 `http://192.168.0.1:8081`），初始化管理员账号，配置认证方式、上网账号、配额与推送。
-4. 保留 Root Shell 或 ADB 恢复通道，在 UFI-Tools 宿主 WiFi 管理中将热点设为 OPEN/NONE，并启用、验证 AP 隔离。
+4. 保留 Root Shell 或 ADB 恢复通道，在 UFI-Tools 宿主 WiFi 管理中将热点设为 OPEN/NONE。
 5. 用第二台未受信任的设备完成真机验收，再开放给访客。
 
 > 提示：新连入的设备若没自动弹出认证页，多半是系统把该网络记成了“已验证”。在手机上「忽略此网络」后重新连接即可触发门户探测。
@@ -66,6 +66,7 @@ ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的�
 | 门户认证 | 上网账号密码、本地图形验证码、hCaptcha / Turnstile / 自定义验证接口、管理员审批 |
 | 审批推送 | 企业微信、飞书、通用 Webhook、SMTP 邮件；带有效期的审批链接 |
 | 网络准入 | 未认证 IPv4 默认拒绝、DNS 门户应答、HTTP 跳转；开启期间阻断热点 IPv6 |
+| 客户端隔离 | 认证开启后自动 DROP 热点网段内互访，访客之间、访客与管理设备之间三层隔离，等同 AP 隔离 / VLAN 隔离效果；访问网关后台与外网不受影响，白名单内网服务器仍可达 |
 | 访问策略 | 域名 / IPv4 黑白名单、白名单免认证、警告页与联系信息定制 |
 | 生命周期 | 独立常驻、开机启动、停止 / 卸载 / 崩溃恢复、宿主停用检测 |
 
@@ -73,11 +74,12 @@ ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的�
 
 - **HTTPS / HSTS 无法无证书警告地透明跳转。** 未认证的 HTTPS、QUIC 与 APP 外网连接会被阻断；认证页由系统“登录网络”、HTTP 请求或本地入口打开。
 - 域名过滤基于 DNS 与 IPv4 地址，属于尽力过滤。已认证设备的加密 DNS、VPN、缓存 IP 与共享 CDN 会影响准确性；本项目不提供应用层审计。
-- 厂商硬件 NAT / 加速、AP 隔离、随机 MAC、固件内核模块必须在实际设备验证；当前仅支持一套热点接口和 IPv4 上网。
+- 厂商硬件 NAT / 加速、随机 MAC、固件内核模块必须在实际设备验证；当前仅支持一套热点接口和 IPv4 上网。
+- 客户端隔离基于 iptables FORWARD DROP 实现，不依赖宿主是否暴露 AP 隔离开关；服务停止时规则自动清理，不污染系统。
 - 流量每 5 秒采样，包含 IP 开销与重传，可能超过配额一个采样窗口；不是运营商计费账本。限速通过字节型 hashlimit 丢包实现。
 - 远程审批地址需经 VPN 或 HTTPS 隧道可达；机器人 Webhook 或邮件不会自动让内网设备暴露到公网。
 - 远程踢人依赖 hostapd 控制 socket；在没有 hostapd_cli 的设备上由守护进程直连 unix socket，找不到控制口时仅记日志、不影响后台操作。
-- 停止或恢复后由本插件恢复网络准入规则；热点的 SSID、加密方式与 AP 隔离由你在 UFI-Tools 宿主 WiFi 管理中维护，插件不再代为改写或回滚。
+- 停止或恢复后由本插件恢复网络准入规则；热点的 SSID、加密方式由你在 UFI-Tools 宿主 WiFi 管理中维护，插件不再代为改写或回滚。
 
 这些限制及第三方服务配置详见 [安装与管理指南](docs/INSTALL.md#实现与边界)。
 
@@ -108,7 +110,7 @@ python3 build.py --arch all --go /path/to/go
 本地 UI 演示不操作防火墙：
 
 ```sh
-go build -mod=vendor -buildvcs=false -o ufi-gate-demo .
+go build -mod=vendor -buildvcs=false -o ufi-gate-demo ./
 ./ufi-gate-demo --demo --dir ./demo-state
 ```
 
@@ -140,7 +142,7 @@ GitHub Actions 对推送和 PR 运行逻辑与语法检查。
 | `firewall.go` / `dns.go` | IPv4 准入、计数、限速、DNS 与域名规则 |
 | `web/` | 管理后台和访客认证页 |
 | `plugin.template.js` | UFI-TOOLS 插件与内嵌服务安装器模板 |
-| `service.sh` | 常驻、开机接入、停止与卸载 |
+| `service.sh` | 常驻、开机接入、停止 / 卸载 |
 | `tests/` / `main_test.go` | 浏览器和逻辑测试 |
 | `docs/` | 安装指南、测试记录与版本说明 |
 | `scripts/` | Release 打包与校验 |
