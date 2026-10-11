@@ -6,10 +6,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--go', default='go', help='Go executable')
 parser.add_argument('--out', default=str(root / 'dist'))
 parser.add_argument('--arch', choices=['all', 'arm32', 'arm64'], default='all')
+parser.add_argument('--version', default=None, help='Version string (overrides main.go const version)')
 args = parser.parse_args()
 out = pathlib.Path(args.out).resolve()
 out.mkdir(parents=True, exist_ok=True)
-version = re.search(r'const version = "([^"]+)"', (root / 'main.go').read_text(encoding='utf-8')).group(1)
+if args.version:
+    version = args.version
+else:
+    version = re.search(r'const version = "([^"]+)"', (root / 'main.go').read_text(encoding='utf-8')).group(1)
 targets = ['arm32', 'arm64'] if args.arch == 'all' else [args.arch]
 manifest = {'version': version, 'go': subprocess.check_output([args.go, 'version'], text=True).strip(), 'builds': []}
 for arch in targets:
