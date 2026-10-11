@@ -107,7 +107,7 @@ jobs:
             "dist/UFI-Gate-${version}-source.zip" \
             dist/build-info.json \
             dist/SHA256SUMS
-          gh release edit "$tag" --draft=false --prerelease
+          gh release edit "$tag" --draft=false --latest
 
       - name: Sync README version references and commit back to main
         shell: bash
