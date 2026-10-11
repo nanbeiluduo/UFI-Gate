@@ -138,3 +138,7 @@ GitHub Actions 对推送和 PR 运行逻辑与语法检查。
 ## 许可与致谢
 
 原创代码按 [MIT License](LICENSE) 提供。`vendor/` 内的 Go 密码库按其原有许可证分发。感谢 [UFI-TOOLS](https://github.com/kanoqwq/UFI-TOOLS) 提供宿主接口；本项目是独立插件，与上游不存在官方隶属关系。
+
+## 联系
+
+有问题、建议或真机兼容反馈，欢迎通过 Telegram 联系：[@nanbeiluduo](https://t.me/nanbeiluduo)
