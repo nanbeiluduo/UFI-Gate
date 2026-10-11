@@ -44,16 +44,14 @@ jobs:
           version="${tag#v}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          # Refuse to build if main.go version does not match the tag.
-          if ! grep -q "const version = \"$version\"" main.go; then
-            echo "::error::main.go version does not match tag $tag. Bump const version first."
-            exit 1
-          fi
           if [[ ! -f "docs/releases/${tag}.md" ]]; then
             echo "::error::Missing release notes docs/releases/${tag}.md"
             exit 1
           fi
-          echo "Releasing $tag (version=$version)"
+          # Auto-align main.go const version with the tag (tag is the source of truth).
+          sed -i -E 's/const version = "[^"]+"/const version = "'"$version"'"/' main.go
+          grep -q "const version = \"$version\"" main.go || { echo "::error::Failed to bump main.go"; exit 1; }
+          echo "Releasing $tag (version=$version); main.go aligned."
 
       - name: Tests and checks
         run: |
@@ -66,7 +64,7 @@ jobs:
 
       - name: Build release attachments
         run: |
-          python3 build.py --out dist
+          python3 build.py --out dist --version "${{ steps.ver.outputs.version }}"
           node --check "dist/UFI-Gate-${{ steps.ver.outputs.version }}-arm32.js"
           node --check "dist/UFI-Gate-${{ steps.ver.outputs.version }}-arm64.js"
           node tests/installer-test.cjs dist
@@ -143,8 +141,8 @@ jobs:
           PY
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
+          git add README.md main.go
           if ! git diff --cached --quiet; then
-            git commit -m "docs: sync README to $tag [skip ci]"
+            git commit -m "chore: sync version to $tag (main.go + README) [skip ci]"
             git push
           fi
