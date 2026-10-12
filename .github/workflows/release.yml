@@ -130,11 +130,14 @@ jobs:
           summary = summary.rstrip('。')
           if f"| `{version}` |" not in text:
               row = f"| `{version}` | {summary}。[详情](docs/releases/{tag}.md) |\n"
-              # Locate the table right after the "## 版本记录" heading, not the first table in the file.
-              m = re.search(r'(##\s*版本记录\s*\n\|[^\n]*\|\n)(\| --- \|\n)', text)
+              # Find the "## 版本记录" heading, then the first table separator after it.
+              idx = text.find("## 版本记录")
+              if idx < 0:
+                  sys.exit("版本记录 heading not found in README")
+              m = re.search(r'(\| --- \|\n)', text[idx:])
               if not m:
-                  sys.exit("版本记录 table not found in README")
-              insert_at = m.end(2)
+                  sys.exit("版本记录 table separator not found in README")
+              insert_at = idx + m.end(1)
               text = text[:insert_at] + row + text[insert_at:]
               n3 = 1
           else:
