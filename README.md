@@ -125,29 +125,28 @@ node tests/ui-test.cjs
 
 可通过 `CHROME_PATH` 指定已有浏览器，通过 `PLUGIN_PATH` 指定构建的安装器以验证内嵌负载（ARM32 包同时设置 `PLUGIN_ARCH=arm32`）。上述演示及规则执行器测试不能替代真机验收。
 
+
 ## 版本记录
 
 | 版本 | 说明 |
-| --- | |
-| `1.0.4` | 门户外观自定义：新增网站 Logo 与认证页 Logo 设置，可以用自己的图片替换默认图标。[详情](docs/releases/v1.0.4.md) |
+| --- | --- |
 | `1.0.3` | 插件安装器移除"热点设为 OPEN / 恢复热点配置"按钮，热点参数统一交回 UFI-Tools 原生 WiFi 管理；按钮分组重排。[详情](docs/releases/v1.0.3.md) |
 | `1.0.2` | 认证门户 8080→8090 避开中兴官方后台占用；新增 hostapd DEAUTH 远程踢人。[详情](docs/releases/v1.0.2.md) |
 | `1.0.1` | 首版：网页认证、设备准入、流量配额、审批推送。[详情](docs/releases/v1.0.1.md) |
 
-GitHub Actions 对推送和 PR 运行逻辑与语法检查。
-
 ## 目录
 
 | 路径 | 内容 |
-| --- | |
+| --- | --- |
 | `main.go` | 服务 API、账户、认证、配额、审批、推送与远程踢人 |
 | `firewall.go` / `dns.go` | IPv4 准入、计数、限速、DNS 与域名规则 |
 | `web/` | 管理后台和访客认证页 |
 | `plugin.template.js` | UFI-TOOLS 插件与内嵌服务安装器模板 |
-| `service.sh` | 常驻、开机接入、停止 / 卸载 |
+| `service.sh` | 常驻、开机接入、停止与卸载 |
 | `tests/` / `main_test.go` | 浏览器和逻辑测试 |
 | `docs/` | 安装指南、测试记录与版本说明 |
 | `scripts/` | Release 打包与校验 |
+GitHub Actions 对推送和 PR 运行逻辑与语法检查。
 
 ## 联系
 
