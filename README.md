@@ -23,6 +23,7 @@ WiFi Captive Portal · 设备准入 · 流量配额
 
 | 输出 | 下载文件 |
 | --- | --- |
+| `1.0.4` | 门户外观自定义：新增网站 Logo 与认证页 Logo 设置，可以用自己的图片替换默认图标。[详情](docs/releases/v1.0.4.md) |
 | `armv7l` / `armv8l` | `UFI-Gate-1.0.4-arm32.js` |
 | `aarch64` / `arm64` | `UFI-Gate-1.0.4-arm64.js` |
 
