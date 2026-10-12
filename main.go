@@ -77,6 +77,7 @@ type Push struct {
 	SMTPPort                                                                          int
 }
 type Config struct {
+	SiteLogo, PortalLogo                                                      string
 	PortalHost                                                                string
 	Enabled                                                                   bool
 	LAN, Gateway, AdminMAC                                                    string
@@ -375,10 +376,12 @@ func (g *Gate) enforceQuota(d *Device) bool {
 	return false
 }
 func (g *Gate) grant(d *Device) error {
-	return g.grantUntil(d,0)
+	return g.grantUntil(d, 0)
 }
-func (g *Gate) grantUntil(d *Device,expires int64) error {
-	if expires!=0&&expires<=time.Now().Unix(){return errors.New("上网账号已过期")}
+func (g *Gate) grantUntil(d *Device, expires int64) error {
+	if expires != 0 && expires <= time.Now().Unix() {
+		return errors.New("上网账号已过期")
+	}
 	if g.ctx.Err() != nil {
 		return errors.New("服务正在停止")
 	}
@@ -393,7 +396,9 @@ func (g *Gate) grantUntil(d *Device,expires int64) error {
 		return errors.New("设备已达到配额，请联系管理员解除")
 	}
 	d.Until = time.Now().Add(time.Duration(g.db.Config.SessionHours) * time.Hour).Unix()
-	if expires!=0&&expires<d.Until {d.Until=expires}
+	if expires != 0 && expires < d.Until {
+		d.Until = expires
+	}
 	d.SessionBytes = 0
 	d.SessionBase = 0
 	g.event("auth", d.MAC+" 认证通过")
@@ -505,7 +510,7 @@ func (g *Gate) portalAPI(w http.ResponseWriter, r *http.Request) {
 				pending = a
 			}
 		}
-		reply(w, 200, map[string]any{"enabled": c.Enabled, "title": c.Title, "subtitle": c.Subtitle, "contact": c.Contact, "warning": c.Warning, "blockWarning": c.BlockWarning, "accent": c.Accent, "methods": c.Methods, "captchaProvider": c.CaptchaProvider, "captchaSite": c.CaptchaSite, "captchaScript": c.CaptchaScript, "state": g.publicDevice(d), "request": pending})
+		reply(w, 200, map[string]any{"enabled": c.Enabled, "title": c.Title, "subtitle": c.Subtitle, "contact": c.Contact, "warning": c.Warning, "blockWarning": c.BlockWarning, "accent": c.Accent, "portalLogo": c.PortalLogo, "methods": c.Methods, "captchaProvider": c.CaptchaProvider, "captchaSite": c.CaptchaSite, "captchaScript": c.CaptchaScript, "state": g.publicDevice(d), "request": pending})
 		return
 	}
 	if !g.db.Config.Enabled {
@@ -591,11 +596,11 @@ func (g *Gate) portalAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok := false
-	accountExpiry:=int64(0)
+	accountExpiry := int64(0)
 	switch v.Method {
 	case "account":
 		a, exists := g.db.Accounts[v.Username]
-		accountExpiry=a.Expires
+		accountExpiry = a.Expires
 		ok = exists && (a.Expires == 0 || a.Expires > time.Now().Unix()) && passwordOK(a.Hash, v.Password)
 		if ok && a.Quota != nil {
 			d.Quota = *a.Quota
@@ -618,7 +623,7 @@ func (g *Gate) portalAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delete(g.attempts, key)
-	if e = g.grantUntil(d,accountExpiry); e != nil {
+	if e = g.grantUntil(d, accountExpiry); e != nil {
 		fail(w, e)
 		return
 	}
@@ -1013,6 +1018,11 @@ func validateConfig(c Config) error {
 			return errors.New("名单仅支持 IPv4、精确域名或 *.域名: " + s)
 		}
 	}
+	for _, logo := range []string{c.SiteLogo, c.PortalLogo} {
+		if _, _, err := decodeLogo(logo); err != nil {
+			return err
+		}
+	}
 	if len(c.Title) > 120 || len(c.Subtitle) > 500 || len(c.Contact) > 500 || len(c.Warning) > 1000 || len(c.BlockWarning) > 1000 || !regexp.MustCompile(`^#[0-9a-fA-F]{6}$`).MatchString(c.Accent) {
 		return errors.New("页面文案或主题色无效")
 	}
@@ -1353,6 +1363,7 @@ func staticFile(w http.ResponseWriter, r *http.Request, name string) {
 }
 func (g *Gate) portalHandler() http.Handler {
 	m := http.NewServeMux()
+	m.HandleFunc("/site-logo", g.siteLogo)
 	m.HandleFunc("/api/", g.portalAPI)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1402,6 +1413,7 @@ func (g *Gate) portalHandler() http.Handler {
 }
 func (g *Gate) adminHandler() http.Handler {
 	m := http.NewServeMux()
+	m.HandleFunc("/site-logo", g.siteLogo)
 	m.HandleFunc("/admin-api/", g.adminAPI)
 	m.HandleFunc("/approve", g.approvalPage)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
