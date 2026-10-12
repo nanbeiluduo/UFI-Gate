@@ -19,6 +19,7 @@ type Firewall struct {
 	runner    func(string, ...string) (string, error)
 	installed bool
 	side      int
+	inputSide int
 	binding   string
 	policy    string
 }
@@ -217,7 +218,12 @@ func (g *Gate) reconcile() (result error) {
 	if next == 1 {
 		suffix = "B"
 	}
-	fc, ic, nc := "UFIG_F"+suffix, "UFIG_I"+suffix, "UFIG_N"+suffix
+	inputNext := 1 - f.inputSide
+	inputSuffix := "A"
+	if inputNext == 1 {
+		inputSuffix = "B"
+	}
+	fc, ic, nc := "UFIG_F"+suffix, "UFIG_I"+inputSuffix, "UFIG_N"+suffix
 	for _, p := range [][2]string{{"filter", fc}, {"filter", ic}, {"nat", nc}} {
 		if e = f.ip(p[0], "-F", p[1]); e != nil {
 			return e
@@ -274,7 +280,7 @@ func (g *Gate) reconcile() (result error) {
 					args = []string{"-o", c.LAN, "-d", d.IP}
 					mode = "dstip"
 				}
-				args = append(args, "-m", "hashlimit", "--hashlimit-above", strconv.Itoa(d.Quota.RateKBps)+"kb/s", "--hashlimit-burst", strconv.Itoa(d.Quota.RateKBps*2)+"kb", "--hashlimit-mode", mode, "--hashlimit-name", fmt.Sprintf("ug%s%s%d", suffix, direction, i), "-j", "DROP")
+				args = append(args, "-m", "hashlimit", "--hashlimit-above", strconv.Itoa(g.effectiveRate(d))+"kb/s", "--hashlimit-burst", strconv.Itoa(g.effectiveRate(d)*2)+"kb", "--hashlimit-mode", mode, "--hashlimit-name", fmt.Sprintf("ug%s%s%d", suffix, direction, i), "-j", "DROP")
 				if e = add("filter", fc, args...); e != nil {
 					return e
 				}
@@ -313,8 +319,8 @@ func (g *Gate) reconcile() (result error) {
 	if e = add("filter", fc, "-m", "comment", "--comment", "ug:blocked", "-j", "DROP"); e != nil {
 		return e
 	}
-	// Portal and DNS are local. Only the installation device can reach admin and UFI's original control plane through hotspot INPUT.
-	for _, a := range [][]string{{"-p", "udp", "--dport", "67", "-j", "ACCEPT"}, {"-p", "udp", "--dport", "5354", "-j", "ACCEPT"}, {"-p", "tcp", "--dport", "5354", "-j", "ACCEPT"}, {"-p", "tcp", "--dport", "8090", "-j", "ACCEPT"}, {"-m", "mac", "--mac-source", c.AdminMAC, "-j", "ACCEPT"}, {"-j", "DROP"}} {
+	// Portal and DNS are local; management access follows the administrator device list.
+	for _, a := range g.adminInputRules() {
 		if e = add("filter", ic, a...); e != nil {
 			return e
 		}
@@ -354,6 +360,7 @@ func (g *Gate) reconcile() (result error) {
 		return e
 	}
 	f.side = next
+	f.inputSide = inputNext
 	bindings := []string{}
 	for _, d := range devices {
 		bindings = append(bindings, d.MAC+"="+d.IP)
@@ -662,7 +669,7 @@ func (g *Gate) loop() {
 		}
 		parts := []string{}
 		for _, d := range sortedDevices(g) {
-			parts = append(parts, d.MAC+":"+g.state(d)+":"+strconv.FormatBool(g.limited(d)))
+			parts = append(parts, d.MAC+":"+g.state(d)+":"+strconv.Itoa(g.effectiveRate(d)))
 		}
 		policy := strings.Join(parts, ";")
 		if policy != lastPolicy {

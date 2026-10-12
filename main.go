@@ -57,6 +57,7 @@ type Quota struct {
 	SlowPercent                   int
 }
 type Device struct {
+	ManualRateKBps                                                  int
 	MAC, IP, Name, Note                                             string
 	FirstSeen, LastSeen, Until                                      int64
 	Trusted, Banned                                                 bool
@@ -77,6 +78,7 @@ type Push struct {
 	SMTPPort                                                                          int
 }
 type Config struct {
+	AdminMACs                                                                 []string
 	SiteLogo, PortalLogo                                                      string
 	PortalHost                                                                string
 	Enabled                                                                   bool
@@ -222,6 +224,9 @@ func loadGate() (*Gate, error) {
 			g.db.Config.Gateway = boot.Gateway
 		}
 	}
+	if g.db.Config.AdminMACs == nil && validMAC(g.db.Config.AdminMAC) {
+		g.db.Config.AdminMACs = []string{g.db.Config.AdminMAC}
+	}
 	g.blockCounters = map[string]uint64{}
 	g.countersDay = time.Now().In(zone).Format("2006-01-02")
 	if g.db.Config.AdminHash == "" {
@@ -236,6 +241,9 @@ func loadGate() (*Gate, error) {
 			}
 		}
 		g.bootExpiry = time.Now().Add(20 * time.Minute).Unix()
+		if info, err := os.Stat(filepath.Join(dir, "setup.token")); err == nil {
+			g.bootExpiry = info.ModTime().Add(20 * time.Minute).Unix()
+		}
 	}
 	g.fw = &Firewall{runner: realRun}
 	roots, _ := x509.SystemCertPool()
@@ -359,13 +367,16 @@ func (g *Gate) state(d *Device) string {
 		return "quota"
 	}
 	if d.Trusted || d.Until > time.Now().Unix() {
+		if d.ManualRateKBps > 0 {
+			return "limited"
+		}
 		return "online"
 	}
 	return "pending"
 }
 func (g *Gate) allowed(d *Device) bool { s := g.state(d); return s == "online" || s == "limited" }
 func (g *Gate) limited(d *Device) bool {
-	return d.LimitReason != "" && d.Quota.Action == "slow" || (g.allowed(d) && d.Quota.SlowPercent > 0 && g.ratio(d) >= float64(d.Quota.SlowPercent)/100)
+	return g.effectiveRate(d) > 0
 }
 func (g *Gate) enforceQuota(d *Device) bool {
 	if d.LimitReason == "" && g.ratio(d) >= 1 {
@@ -462,7 +473,7 @@ func (g *Gate) badAttempt(k string) {
 	g.attempts[k] = a
 }
 func (g *Gate) publicDevice(d *Device) map[string]any {
-	return map[string]any{"device": d, "status": g.state(d), "ratio": g.ratio(d), "limited": g.limited(d)}
+	return map[string]any{"device": d, "status": g.state(d), "ratio": g.ratio(d), "limited": g.limited(d), "admin": g.isAdminDevice(d.MAC), "rateKBps": g.effectiveRate(d)}
 }
 func (g *Gate) cleanupEphemeral() {
 	now := time.Now().Unix()
@@ -650,6 +661,13 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := r.URL.Path
+	if g.db.Config.AdminHash != "" {
+		mac, err := g.peerMAC(r)
+		if err != nil || !g.isAdminDevice(mac) {
+			reply(w, 403, map[string]string{"error": "此设备没有后台管理权限"})
+			return
+		}
+	}
 	if path == "/admin-api/ready" && r.Method == "GET" {
 		reply(w, 200, map[string]any{"version": version, "setup": g.db.Config.AdminHash == ""})
 		return
@@ -666,7 +684,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if path == "/admin-api/setup" {
-			if g.db.Config.AdminHash != "" || time.Now().Unix() > g.bootExpiry || subtle.ConstantTimeCompare([]byte(v.Token), []byte(g.bootToken)) != 1 {
+			if g.db.Config.AdminHash != "" || g.bootToken == "" || time.Now().Unix() > g.bootExpiry || subtle.ConstantTimeCompare([]byte(v.Token), []byte(g.bootToken)) != 1 {
 				reply(w, 403, map[string]string{"error": "初始化凭证无效或已过期，请在插件中重新生成"})
 				return
 			}
@@ -679,13 +697,18 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 				fail(w, e)
 				return
 			}
+			oldConfig := g.db.Config
 			g.db.Config.AdminName = v.Username
 			g.db.Config.AdminHash = passwordHash(v.Password)
 			g.db.Config.AdminMAC = mac
+			g.db.Config.AdminMACs = []string{mac}
 			owner := g.device(mac)
+			oldOwner := *owner
 			owner.Trusted = true
 			owner.IP = peer(r)
-			if e = g.save(); e != nil {
+			if e = g.saveAdminChange(oldConfig); e != nil {
+				*owner = oldOwner
+				_ = g.save()
 				fail(w, e)
 				return
 			}
@@ -784,6 +807,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		old := g.db.Config
 		v.Enabled = old.Enabled
 		v.AdminMAC = old.AdminMAC
+		v.AdminMACs = old.AdminMACs
 		v.AdminName = old.AdminName
 		v.AdminHash = old.AdminHash
 		v.SigningKey = old.SigningKey
@@ -847,6 +871,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 	case "/admin-api/device":
 		var v struct {
 			MAC, Action, Note string
+			RateKBps          int
 			Quota             *Quota
 		}
 		if e = body(w, r, &v); e != nil {
@@ -860,6 +885,20 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		g.sample()
 		d := g.device(v.MAC)
 		switch v.Action {
+		case "admin-add", "admin-remove":
+			e = g.setAdminDevice(v.MAC, v.Action == "admin-add")
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			reply(w, 200, map[string]bool{"ok": true})
+			return
+		case "rate":
+			if v.RateKBps < 0 || v.RateKBps > 102400 {
+				e = errors.New("限速须为 0–102400 KiB/s，0 表示取消独立限速")
+				break
+			}
+			d.ManualRateKBps = v.RateKBps
 		case "allow":
 			e = g.grant(d)
 		case "block":
@@ -990,10 +1029,15 @@ func validateQuota(q Quota) error {
 	return nil
 }
 func validateConfig(c Config) error {
+	for _, mac := range adminDeviceMACs(c) {
+		if !validMAC(mac) {
+			return errors.New("管理员设备 MAC 地址无效")
+		}
+	}
 	if c.PortalHost != "" && (!domainRE.MatchString(c.PortalHost) || strings.HasPrefix(c.PortalHost, "*.") || strings.Contains(c.PortalHost, "..") || ipv4(c.PortalHost)) {
 		return errors.New("认证页域名须为精确域名，不含协议、端口或通配符")
 	}
-	if !ifaceRE.MatchString(c.LAN) || !ipv4(c.Gateway) || !validMAC(c.AdminMAC) {
+	if !ifaceRE.MatchString(c.LAN) || !ipv4(c.Gateway) || (c.AdminHash != "" && len(adminDeviceMACs(c)) == 0) {
 		return errors.New("请填写有效热点接口和 IPv4 网关")
 	}
 	if c.SessionHours < 1 || c.SessionHours > 720 {
@@ -1484,8 +1528,15 @@ func main() {
 	recoverFlag := flag.Bool("recover", false, "清除本插件防火墙规则")
 	cleanupOnly := flag.Bool("cleanup-rules", false, "仅清除规则，用于 supervisor 崩溃恢复")
 	setup := flag.Bool("setup-token", false, "重新生成初始化 token（仅未初始化）")
+	resetAdmin := flag.Bool("reset-admin", false, "通过本地控制通道重置管理员，保留联网设备")
 	flag.Parse()
 	os.MkdirAll(dir, 0700)
+	if *resetAdmin {
+		if e := requestAdminReset(); e != nil {
+			log.Fatal(e)
+		}
+		return
+	}
 	if *recoverFlag || *cleanupOnly {
 		f := Firewall{runner: realRun}
 		if e := f.cleanup(); e != nil {
@@ -1558,6 +1609,11 @@ func main() {
 	defer tcp.Close()
 	pserver := &http.Server{Handler: g.portalHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16384}
 	aserver := &http.Server{Handler: g.adminHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16384}
+	control, err := g.startControl()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer control.Close()
 	go pserver.Serve(portal)
 	go aserver.Serve(admin)
 	go g.serveDNS(udp, tcp)
