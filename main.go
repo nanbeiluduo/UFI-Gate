@@ -1408,6 +1408,7 @@ func staticFile(w http.ResponseWriter, r *http.Request, name string) {
 func (g *Gate) portalHandler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("/site-logo", g.siteLogo)
+	m.HandleFunc("/default-logo.png", defaultLogo)
 	m.HandleFunc("/api/", g.portalAPI)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1458,6 +1459,7 @@ func (g *Gate) portalHandler() http.Handler {
 func (g *Gate) adminHandler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("/site-logo", g.siteLogo)
+	m.HandleFunc("/default-logo.png", defaultLogo)
 	m.HandleFunc("/admin-api/", g.adminAPI)
 	m.HandleFunc("/approve", g.approvalPage)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

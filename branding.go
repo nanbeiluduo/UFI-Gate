@@ -13,6 +13,23 @@ import (
 )
 
 // Inline images keep branding available before the visitor has Internet access.
+func defaultLogo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "方法不支持", 405)
+		return
+	}
+	raw, err := web.ReadFile("web/default-logo.png")
+	if err != nil {
+		http.Error(w, "默认图标不可用", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(raw)
+	}
+}
+
 func decodeLogo(value string) ([]byte, string, error) {
 	if value == "" {
 		return nil, "", nil
@@ -51,8 +68,12 @@ func (g *Gate) siteLogo(w http.ResponseWriter, r *http.Request) {
 	g.mu.Unlock()
 	raw, mime, err := decodeLogo(value)
 	if err != nil || len(raw) == 0 {
-		mime = "image/svg+xml"
-		raw = []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#0067c0"/><g fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><path d="M10 18a23 23 0 0 1 28 0M15 25a15 15 0 0 1 18 0M20 32a7 7 0 0 1 8 0"/><path d="M24 38h0"/></g></svg>`)
+		mime = "image/png"
+		raw, err = web.ReadFile("web/default-logo.png")
+		if err != nil {
+			http.Error(w, "默认图标不可用", 500)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Cache-Control", "no-store")

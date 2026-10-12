@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"image"
 	"image/png"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -45,7 +46,17 @@ func TestBranding(t *testing.T) {
 	g.db.Config.SiteLogo = ""
 	w = httptest.NewRecorder()
 	g.siteLogo(w, httptest.NewRequest("GET", "/site-logo", nil))
-	if w.Header().Get("Content-Type") != "image/svg+xml" {
+	defaultImage, err := web.ReadFile("web/default-logo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Header().Get("Content-Type") != "image/png" || !bytes.Equal(w.Body.Bytes(), defaultImage) {
 		t.Fatal("default logo missing")
+	}
+	for _, handler := range []http.Handler{g.portalHandler(), g.adminHandler()} {
+		w = call(handler, "/default-logo.png", "GET", nil, false, g)
+		if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" || !bytes.Equal(w.Body.Bytes(), defaultImage) {
+			t.Fatal("embedded default logo not served")
+		}
 	}
 }
