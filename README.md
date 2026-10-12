@@ -144,14 +144,21 @@ node tests/ui-test.cjs
 | 路径 | 内容 |
 | --- | --- |
 | `main.go` | 服务 API、账户、认证、配额、审批、推送与远程踢人 |
-| `firewall.go` / `dns.go` | IPv4 准入、计数、限速、DNS 与域名规则 |
-| `web/` | 管理后台和访客认证页 |
-| `plugin.template.js` | UFI-TOOLS 插件与内嵌服务安装器模板 |
-| `service.sh` | 常驻、开机接入、停止与卸载 |
-| `tests/` / `main_test.go` | 浏览器和逻辑测试 |
-| `docs/` | 安装指南、测试记录与版本说明 |
-| `scripts/` | Release 打包与校验 |
-GitHub Actions 对推送和 PR 运行逻辑与语法检查。
+| `management.go` | 管理员重置、本地控制通道、多管理员设备权限与独立限速策略 |
+| `branding.go` | 自定义 Logo 校验、网站图标输出与默认图标回退 |
+| `firewall.go` / `dns.go` | IPv4 准入、流量计数、限速、管理员设备访问规则、DNS 与域名规则 |
+| `web/` | 管理后台与访客认证页，包含 Logo 设置、管理员设备管理和独立限速操作 |
+| `plugin.template.js` | UFI-TOOLS 插件与内嵌服务安装器模板，包含管理员重置确认入口 |
+| `service.sh` | 服务常驻、开机启动、停止与卸载 |
+| `emergency-recover.sh` | 紧急恢复网络脚本 |
+| `main_test.go` / `management_test.go` / `branding_test.go` | 核心逻辑、管理员重置与权限、独立限速及 Logo 功能测试 |
+| `tests/` | 浏览器交互与安装器测试 |
+| `build.py` | 编译 ARM32 / ARM64 服务并生成单文件插件安装包 |
+| `scripts/` | Release 源码打包、安装包校验与 SHA-256 校验清单生成 |
+| `.github/workflows/` | CI 检查、双架构构建、QEMU 测试与 Release 自动发布 |
+| `docs/` | 安装指南、功能说明、测试记录与版本发布说明 |
+
+GitHub Actions 自动运行 Go 测试、静态与语法检查、双架构构建、安装器校验及 QEMU 测试。浏览器交互测试目前需单独运行。
 
 ## 联系
 
