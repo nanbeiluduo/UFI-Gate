@@ -141,7 +141,7 @@ func TestAdminDevicePermissions(t *testing.T) {
 	g.sessions["stolen"] = Session{time.Now().Unix(), d.IP}
 	r.AddCookie(&http.Cookie{Name: "ug_session", Value: "stolen"})
 	w := httptest.NewRecorder()
-	g.adminHandler().ServeHTTP(w, r)
+	g.adminAPI(w, r)
 	if w.Code != 403 {
 		t.Fatal("removed admin accessed API", w.Code)
 	}

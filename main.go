@@ -1473,7 +1473,7 @@ func (g *Gate) adminHandler() http.Handler {
 			http.NotFound(w, r)
 		}
 	})
-	return g.middleware(m)
+	return g.protectAdmin(g.middleware(m))
 }
 
 var realRun = executeCommand
@@ -1617,7 +1617,7 @@ func main() {
 	}
 	defer control.Close()
 	go pserver.Serve(portal)
-	go aserver.Serve(admin)
+	go aserver.Serve(&adminListener{Listener: admin, gate: g})
 	go g.serveDNS(udp, tcp)
 	g.mu.Lock()
 	if g.db.Config.Enabled {
