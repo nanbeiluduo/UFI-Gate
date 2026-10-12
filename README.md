@@ -128,7 +128,7 @@ node tests/ui-test.cjs
 ## 版本记录
 
 | 版本 | 说明 |
-| --- | |
+| --- | ---
 | `1.0.4` | 门户外观自定义：新增网站 Logo 与认证页 Logo 设置，可以用自己的图片替换默认图标。[详情](docs/releases/v1.0.4.md) |
 | `1.0.3` | 插件安装器移除"热点设为 OPEN / 恢复热点配置"按钮，热点参数统一交回 UFI-Tools 原生 WiFi 管理；按钮分组重排。[详情](docs/releases/v1.0.3.md) |
 | `1.0.2` | 认证门户 8080→8090 避开中兴官方后台占用；新增 hostapd DEAUTH 远程踢人。[详情](docs/releases/v1.0.2.md) |
