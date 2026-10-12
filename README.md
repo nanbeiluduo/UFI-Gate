@@ -13,7 +13,7 @@ WiFi Captive Portal · 设备准入 · 流量配额
 
 开放热点连接后，访客先完成认证，再获得上网许可。管理后台独立运行，采用 Fluent / WinUI 3 视觉风格，适配手机、平板和电脑。
 
-**当前版本：`1.0.3`。** 插件安装器移除与宿主重复的热点改写按钮，SSID/加密/AP 隔离统一在 UFI-Tools 原生 WiFi 页面设置。已在中兴 MU3351 / V50（`armv8l`）真机完成：管理后台、认证下发、新设备自动弹窗、远程踢人下线的端到端验证。
+**当前版本：`1.0.4`。** 插件安装器移除与宿主重复的热点改写按钮，SSID/加密/AP 隔离统一在 UFI-Tools 原生 WiFi 页面设置。已在中兴 MU3351 / V50（`armv8l`）真机完成：管理后台、认证下发、新设备自动弹窗、远程踢人下线的端到端验证。
 
 ## 下载与安装
 
@@ -23,8 +23,9 @@ WiFi Captive Portal · 设备准入 · 流量配额
 
 | 输出 | 下载文件 |
 | --- | --- |
-| `armv7l` / `armv8l` | `UFI-Gate-1.0.3-arm32.js` |
-| `aarch64` / `arm64` | `UFI-Gate-1.0.3-arm64.js` |
+| `1.0.4` | 门户外观自定义：新增网站 Logo 与认证页 Logo 设置，可以用自己的图片替换默认图标。[详情](docs/releases/v1.0.4.md) |
+| `armv7l` / `armv8l` | `UFI-Gate-1.0.4-arm32.js` |
+| `aarch64` / `arm64` | `UFI-Gate-1.0.4-arm64.js` |
 
 ARM32 使用 `GOARCH=arm GOARM=7,softfloat CGO_ENABLED=0`，不依赖设备的动态链接器或硬浮点支持；要求 ARMv7 或更高的 32 位执行环境。`armv8l` 应选择 ARM32 包，不能通过跳过架构检测运行 ARM64 二进制。其他架构会在写入服务前被拒绝。
 
