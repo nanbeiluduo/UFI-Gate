@@ -40,7 +40,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.1.1"
+const version = "1.1.2"
 
 var dir string
 var demo bool
