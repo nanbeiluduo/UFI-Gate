@@ -1489,41 +1489,6 @@ func executeCommand(bin string, args ...string) (string, error) {
 	return string(b), nil
 }
 
-// kickStation deauthenticates a Wi-Fi client over the hostapd control socket so it
-// reassociates and re-triggers the captive-portal probe. Best effort: never blocks
-// the admin action, failures are only logged.
-func (g *Gate) kickStation(mac string) {
-	dirs := []string{
-		"/data/vendor/wifi/hostapd/ctrl",
-		"/data/misc/wifi/hostapd",
-		"/var/run/hostapd",
-	}
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			path := dir + "/" + e.Name()
-			c, err := net.DialTimeout("unix", path, 1500*time.Millisecond)
-			if err != nil {
-				continue
-			}
-			c.SetDeadline(time.Now().Add(1500 * time.Millisecond))
-			fmt.Fprintf(c, "DEAUTH %s\n", mac)
-			buf := make([]byte, 128)
-			n, _ := c.Read(buf)
-			c.Close()
-			g.event("kick", mac+" hostapd "+e.Name()+" -> "+strings.TrimSpace(string(buf[:n])))
-			return
-		}
-	}
-	g.event("kick", mac+" 未找到 hostapd 控制口，未踢线")
-}
-
 func main() {
 	flag.StringVar(&dir, "dir", "/data/ufi-gate", "状态目录")
 	flag.BoolVar(&demo, "demo", false, "仅用于本机演示，不操作防火墙")
