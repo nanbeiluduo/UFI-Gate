@@ -1,19 +1,25 @@
 name: Publish release
 
 on:
-  push:
-    tags: ['v*']
+  # 只通过网页手动触发：填版本号，workflow 自己打 tag、push tag、再发版。
+  # 不再监听 push.tags，避免本 workflow push tag 后又把自己触发一次。
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to release (e.g. v1.0.4)'
+      version:
+        description: '要发布的版本号，例如 1.2.0（可带可不带 v/V 前缀）'
         required: true
+        type: string
+      branch:
+        description: '从哪个分支切版（默认 main）'
+        required: false
+        type: string
+        default: main
 
 permissions:
-  contents: write
+  contents: write # 用于 push tag 和创建 release
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ inputs.version }}
   cancel-in-progress: false
 
 jobs:
@@ -23,32 +29,51 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.branch || 'main' }}
+          fetch-depth: 0
+
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24.2'
           cache: false
 
-      - name: Derive and verify version from tag
+      - name: Derive and verify version
         id: ver
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BRANCH: ${{ inputs.branch || 'main' }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="$RELEASE_TAG"
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Tag must look like vX.Y.Z, got '$tag'"
+          raw="$INPUT_VERSION"
+          version="$(echo "$raw" | sed -E 's/^[vV]//')"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::版本号必须是 X.Y.Z，got '$raw'"
             exit 1
           fi
-          version="${tag#v}"
+          tag="v$version"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if [[ ! -f "docs/releases/${tag}.md" ]]; then
-            echo "::error::Missing release notes docs/releases/${tag}.md"
+            echo "::error::缺少发布说明 docs/releases/${tag}.md，请先补上再发版"
             exit 1
           fi
-          echo "Releasing $tag; build.py embeds the tag version."
+          echo "Releasing $tag from branch $INPUT_BRANCH"
+
+      - name: Fail early if tag or release already exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${{ github.repository }}/git/refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG 已经存在于远程，拒绝重复发布"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG 已经存在，拒绝重复发布"
+            exit 1
+          fi
 
       - name: Tests and checks
         run: |
@@ -90,6 +115,18 @@ jobs:
           qemu-arm dist/ufi-gate-arm32 -h
           qemu-aarch64 dist/ufi-gate-arm64 -h
 
+      - name: Create and push tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
       - name: Publish release (draft -> upload -> publish)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,10 +138,6 @@ jobs:
           set -euo pipefail
           tag="$RELEASE_TAG"
           version="$RELEASE_VERSION"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "::error::Release $tag already exists. Refusing to overwrite it."
-            exit 1
-          fi
           gh release create "$tag" \
             --verify-tag \
             --title "UFI-Gate $tag" \
@@ -119,7 +152,7 @@ jobs:
             dist/update.json dist/update.json.sig \
             dist/build-info.json \
             dist/SHA256SUMS
-          # Publishing an older maintenance tag must not move latest backwards.
+          # 发布维护版旧 tag 时不能把 latest 往回拉。
           previous=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null || true)
           latest=$(python3 - "$version" "$previous" <<'PY'
           import re, sys
