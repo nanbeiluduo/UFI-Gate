@@ -13,15 +13,17 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_name || inputs.tag }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24.2'
@@ -29,14 +31,12 @@ jobs:
 
       - name: Derive and verify version from tag
         id: ver
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${GITHUB_REF_NAME}"
-          fi
+          tag="$RELEASE_TAG"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Tag must look like vX.Y.Z, got '$tag'"
             exit 1
@@ -48,27 +48,36 @@ jobs:
             echo "::error::Missing release notes docs/releases/${tag}.md"
             exit 1
           fi
-          # Auto-align main.go const version with the tag (tag is the source of truth).
-          sed -i -E 's/const version = "[^"]+"/const version = "'"$version"'"/' main.go
-          grep -q "const version = \"$version\"" main.go || { echo "::error::Failed to bump main.go"; exit 1; }
-          echo "Releasing $tag (version=$version); main.go aligned."
+          echo "Releasing $tag; build.py embeds the tag version."
 
       - name: Tests and checks
         run: |
           go test -mod=vendor -race ./...
           go vet -mod=vendor ./...
           node --check web/admin.js
+          node --check web/admin-updates.js
           node --check web/portal.js
           sh -n service.sh
           sh -n emergency-recover.sh
 
       - name: Build release attachments
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          RELEASE_VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          python3 build.py --out dist --version "${{ steps.ver.outputs.version }}"
+          python3 build.py --out dist --version "$RELEASE_VERSION" --require-signature
           node --check "dist/UFI-Gate-${{ steps.ver.outputs.version }}-arm32.js"
           node --check "dist/UFI-Gate-${{ steps.ver.outputs.version }}-arm64.js"
           node tests/installer-test.cjs dist
           python3 scripts/package_release.py --out dist
+
+      - name: Browser regression checks
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps chromium
+          go build -mod=vendor -buildvcs=false -o ufi-gate-demo .
+          node tests/update-ui-test.cjs
+          node tests/management-ui-test.cjs
 
       - name: Execute ARM32 and ARM64 tests under QEMU
         run: |
@@ -85,17 +94,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.ver.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ steps.ver.outputs.tag }}"
-          version="${{ steps.ver.outputs.version }}"
+          tag="$RELEASE_TAG"
+          version="$RELEASE_VERSION"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::error::Release $tag already exists. Refusing to overwrite it."
             exit 1
           fi
           gh release create "$tag" \
-            --target "$GITHUB_SHA" \
+            --verify-tag \
             --title "UFI-Gate $tag" \
             --notes-file "docs/releases/${tag}.md" \
             --draft
@@ -103,55 +114,18 @@ jobs:
             "dist/UFI-Gate-${version}-arm32.js" \
             "dist/UFI-Gate-${version}-arm64.js" \
             "dist/UFI-Gate-${version}-source.zip" \
+            "dist/UFI-Gate-${version}-arm32-update.tar.gz" \
+            "dist/UFI-Gate-${version}-arm64-update.tar.gz" \
+            dist/update.json dist/update.json.sig \
             dist/build-info.json \
             dist/SHA256SUMS
-          gh release edit "$tag" --draft=false --latest
-
-      - name: Sync README version references and commit back to main
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ steps.ver.outputs.tag }}"
-          version="${{ steps.ver.outputs.version }}"
-          python3 - <<'PY'
-          import re, pathlib, sys
-          tag = "${{ steps.ver.outputs.tag }}"
-          version = "${{ steps.ver.outputs.version }}"
-          readme = pathlib.Path("README.md")
-          text = readme.read_text(encoding="utf-8")
-
-          # 1. 当前版本：`old` -> `new`
-          text, n1 = re.subn(r'(当前版本：`)[^`]+(`)', rf'\g<1>{version}\g<2>', text, count=1)
-          # 2. 下载表格里的 UFI-Gate-old-armXX.js -> UFI-Gate-new-armXX.js
-          text, n2 = re.subn(r'UFI-Gate-\d+\.\d+\.\d+-(arm32|arm64)\.js', rf'UFI-Gate-{version}-\1.js', text)
-          # 3. 版本记录表：在 | --- | 分隔行后插入新行（取 release notes 第一段作为描述）
-          notes = pathlib.Path(f"docs/releases/{tag}.md").read_text(encoding="utf-8").splitlines()
-          summary = next((ln.strip() for ln in notes if ln.strip() and not ln.startswith('#')), "")
-          summary = summary.rstrip('。')
-          if f"| `{version}` |" not in text:
-              row = f"| `{version}` | {summary}。[详情](docs/releases/{tag}.md) |\n"
-              # Find the "## 版本记录" heading, then the first table separator after it.
-              idx = text.find("## 版本记录")
-              if idx < 0:
-                  sys.exit("版本记录 heading not found in README")
-              m = re.search(r'(\| --- \|\n)', text[idx:])
-              if not m:
-                  sys.exit("版本记录 table separator not found in README")
-              insert_at = idx + m.end(1)
-              text = text[:insert_at] + row + text[insert_at:]
-              n3 = 1
-          else:
-              n3 = 1
-
-          readme.write_text(text, encoding="utf-8", newline="\n")
-          print(f"replaced: current_version={n1} download_links={n2} added_row={n3}")
-          if n1 == 0 or n3 == 0:
-              sys.exit("README sync pattern not matched; inspect README manually")
+          # Publishing an older maintenance tag must not move latest backwards.
+          previous=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null || true)
+          latest=$(python3 - "$version" "$previous" <<'PY'
+          import re, sys
+          parse = lambda v: tuple(map(int, v.lstrip('v').split('.')))
+          old = sys.argv[2]
+          print('true' if not re.fullmatch(r'v?\d+\.\d+\.\d+', old) or parse(sys.argv[1]) > parse(old) else 'false')
           PY
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md main.go
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: sync version to $tag (main.go + README) [skip ci]"
-            git push
-          fi
+          )
+          gh release edit "$tag" --draft=false --latest="$latest"
