@@ -7,11 +7,13 @@ window.createUpdateUI = ({api, esc, stamp, toast, navigate}) => {
   const newer=(a,b)=>{if(!/^\d+\.\d+\.\d+$/.test(a||''))return false;const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i];return false};
   async function perform(fn){try{await fn()}catch(e){toast(e.message)}}
   function mount(){
-    $('root').insertAdjacentHTML('beforeend','<button id="message-float" class="message-float" aria-label="打开消息盒子">消息 <span id="message-count">0</span></button><dialog id="message-box" class="message-box"><div class="row between"><h2>消息盒子</h2><button id="message-close">关闭</button></div><div class="row"><select id="message-filter" aria-label="通知筛选"><option value="all">全部消息</option><option value="unread">未读消息</option><option value="updates">版本与更新</option><option value="alerts">设备与异常</option></select><button id="message-read-all">全部已读</button></div><div id="message-list"></div></dialog>');
+    $('root').insertAdjacentHTML('beforeend','<button id="message-float" class="message-float" aria-label="打开消息盒子">消息 <span id="message-count">0</span></button><dialog id="message-box" class="message-box"><div class="row between"><h2>消息盒子</h2><button id="message-close">关闭</button></div><div class="row"><select id="message-filter" aria-label="通知筛选"><option value="all">全部消息</option><option value="unread">未读消息</option><option value="updates">版本与更新</option><option value="alerts">设备与异常</option></select><button id="message-read-all">全部已读</button><button id="message-delete-read">删除已读</button><button id="message-clear">清空全部</button></div><div id="message-list"></div></dialog>');
     $('message-float').onclick=()=>perform(async()=>{await refresh();renderMessages();$('message-box').showModal()});
     $('message-close').onclick=()=>$('message-box').close();
     $('message-filter').onchange=e=>{filter=e.target.value;renderMessages()};
     $('message-read-all').onclick=()=>perform(async()=>{await api('notifications/read',{All:true});await refresh()});
+    $('message-delete-read').onclick=()=>perform(async()=>{await api('notifications/delete',{Read:true});toast('已删除已读消息');await refresh()});
+    $('message-clear').onclick=()=>perform(async()=>{if(!confirm('确认清空所有消息？此操作不可恢复。'))return;await api('notifications/delete',{All:true});toast('已清空所有消息');await refresh()});
   }
   function renderMessages(){
     if(!$('message-list'))return;
