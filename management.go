@@ -166,6 +166,16 @@ func (g *Gate) startControl() (net.Listener, error) {
 		return nil, err
 	}
 	s := &http.Server{ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 25 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/health" {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			if !g.ready || g.ctx.Err() != nil {
+				http.Error(w, "not ready", 503)
+				return
+			}
+			reply(w, 200, VersionInfo{Version: currentVersion(), Arch: buildArch(), Protocol: updateProtocol})
+			return
+		}
 		if r.Method != "POST" || r.URL.Path != "/reset-admin" {
 			http.NotFound(w, r)
 			return

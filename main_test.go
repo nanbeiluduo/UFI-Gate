@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -324,7 +325,7 @@ func TestPersistenceAndPermissions(t *testing.T) {
 		t.Fatal(e)
 	}
 	st, e := os.Stat(filepath.Join(dir, "state.json"))
-	if e != nil || st.Mode().Perm() != 0600 {
+	if e != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0600) {
 		t.Fatal("state must be 0600")
 	}
 	other, e := loadGate()

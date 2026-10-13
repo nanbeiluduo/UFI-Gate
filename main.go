@@ -40,7 +40,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.0.9"
+const version = "1.0.10"
 
 var dir string
 var demo bool
@@ -57,6 +57,7 @@ type Quota struct {
 	SlowPercent                   int
 }
 type Device struct {
+	QuotaWarned                                                     bool
 	ManualRateKBps                                                  int
 	MAC, IP, Name, Note                                             string
 	FirstSeen, LastSeen, Until                                      int64
@@ -78,6 +79,8 @@ type Push struct {
 	SMTPPort                                                                          int
 }
 type Config struct {
+	NotifyPush                                                                map[string]bool
+	AutoUpdateCheck                                                           bool
 	AdminMACs                                                                 []string
 	SiteLogo, PortalLogo                                                      string
 	PortalHost                                                                string
@@ -99,11 +102,13 @@ type Request struct {
 	Created, Expires, Decided                            int64
 }
 type DB struct {
-	Config   Config
-	Devices  map[string]*Device
-	Accounts map[string]Account
-	Requests map[string]*Request
-	Logs     []Event
+	LastUpdateNotice, LastReleaseNotice string
+	Notifications                       []Notification
+	Config                              Config
+	Devices                             map[string]*Device
+	Accounts                            map[string]Account
+	Requests                            map[string]*Request
+	Logs                                []Event
 }
 type Event struct {
 	Time          int64
@@ -122,26 +127,29 @@ type Challenge struct {
 	Expires     int64
 }
 type Gate struct {
-	mu                           sync.Mutex
-	db                           DB
-	sessions                     map[string]Session
-	attempts                     map[string]Attempt
-	challenges                   map[string]Challenge
-	counters                     map[string]uint64
-	resolvedWhite, resolvedBlack map[string]int64
-	bootToken                    string
-	bootExpiry                   int64
-	fw                           *Firewall
-	started                      time.Time
-	rates                        []RatePoint
-	lastSample                   time.Time
-	ctx                          context.Context
-	cancel                       context.CancelFunc
-	httpClient                   *http.Client
-	dnsSlots                     chan struct{}
-	countersDay                  string
-	blockedPackets, blackPackets uint64
-	blockCounters                map[string]uint64
+	ready                           bool
+	release                         ReleaseInfo
+	updateChecking, updatePreparing bool
+	mu                              sync.Mutex
+	db                              DB
+	sessions                        map[string]Session
+	attempts                        map[string]Attempt
+	challenges                      map[string]Challenge
+	counters                        map[string]uint64
+	resolvedWhite, resolvedBlack    map[string]int64
+	bootToken                       string
+	bootExpiry                      int64
+	fw                              *Firewall
+	started                         time.Time
+	rates                           []RatePoint
+	lastSample                      time.Time
+	ctx                             context.Context
+	cancel                          context.CancelFunc
+	httpClient                      *http.Client
+	dnsSlots                        chan struct{}
+	countersDay                     string
+	blockedPackets, blackPackets    uint64
+	blockCounters                   map[string]uint64
 }
 type RatePoint struct {
 	Time     int64
@@ -194,6 +202,7 @@ func (g *Gate) save() error {
 	return atomicWrite(filepath.Join(dir, "state.json"), b)
 }
 func (g *Gate) event(k, m string) {
+	g.notificationEvent(k, m)
 	g.db.Logs = append(g.db.Logs, Event{time.Now().Unix(), k, m})
 	if len(g.db.Logs) > 500 {
 		g.db.Logs = g.db.Logs[len(g.db.Logs)-500:]
@@ -467,6 +476,7 @@ func (g *Gate) badAttempt(k string) {
 	a := g.attempts[k]
 	a.Failures++
 	if a.Failures >= 5 {
+		g.notify("auth_failure", "连续认证失败，已暂时限制："+k, "logs", "auth:"+k, true)
 		a.Until = time.Now().Add(10 * time.Minute).Unix()
 		a.Failures = 0
 	}
@@ -586,14 +596,13 @@ func (g *Gate) portalAPI(w http.ResponseWriter, r *http.Request) {
 		g.db.Requests[a.ID] = a
 		g.attempts[key] = Attempt{Until: time.Now().Add(60 * time.Second).Unix()}
 		g.event("approval", mac+" 申请上网")
+		g.notify("approval", mac+" 申请上网", "approvals", "approval:"+a.ID, true).RequestID = a.ID
 		if e = g.save(); e != nil {
 			delete(g.db.Requests, a.ID)
 			fail(w, e)
 			return
 		}
-		p := g.db.Config.Push
-		copyA := *a
-		go g.pushRequest(p, copyA)
+
 		reply(w, 200, a)
 		return
 	}
@@ -669,7 +678,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if path == "/admin-api/ready" && r.Method == "GET" {
-		reply(w, 200, map[string]any{"version": version, "setup": g.db.Config.AdminHash == ""})
+		reply(w, 200, map[string]any{"version": currentVersion(), "setup": g.db.Config.AdminHash == ""})
 		return
 	}
 	if (path == "/admin-api/login" || path == "/admin-api/setup") && r.Method == "POST" {
@@ -733,6 +742,9 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 401, map[string]string{"error": "请先登录管理后台"})
 		return
 	}
+	if g.updateAPI(w, r) || g.notificationsAPI(w, r) {
+		return
+	}
 	if r.Method == "GET" {
 		switch path {
 		case "/admin-api/dashboard":
@@ -762,7 +774,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 				requests = append(requests, a)
 			}
 			sort.Slice(requests, func(i, j int) bool { return requests[i].Created > requests[j].Created })
-			reply(w, 200, map[string]any{"enabled": g.db.Config.Enabled, "uptime": int(time.Since(g.started).Seconds()), "devices": devices, "requests": requests, "today": today, "month": month, "total": total, "up": up, "down": down, "online": online, "approved": approved, "limited": limited, "blocked": g.blockedPackets, "blackHits": g.blackPackets, "rates": g.rates, "version": version})
+			reply(w, 200, map[string]any{"enabled": g.db.Config.Enabled, "uptime": int(time.Since(g.started).Seconds()), "devices": devices, "requests": requests, "today": today, "month": month, "total": total, "up": up, "down": down, "online": online, "approved": approved, "limited": limited, "blocked": g.blockedPackets, "blackHits": g.blackPackets, "rates": g.rates, "version": currentVersion()})
 		case "/admin-api/config":
 			c := g.db.Config
 			c.AdminHash = ""
@@ -805,6 +817,8 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		old := g.db.Config
+		v.NotifyPush = old.NotifyPush
+		v.AutoUpdateCheck = old.AutoUpdateCheck
 		v.Enabled = old.Enabled
 		v.AdminMAC = old.AdminMAC
 		v.AdminMACs = old.AdminMACs
@@ -1220,9 +1234,9 @@ func (g *Gate) approvalPage(w http.ResponseWriter, r *http.Request) {
 func htmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;", "'", "&#39;").Replace(s)
 }
-func (g *Gate) pushRequest(p Push, a Request) {
+func (g *Gate) sendRequest(p Push, a Request) error {
 	if p.Kind == "" {
-		return
+		return nil
 	}
 	g.mu.Lock()
 	base := strings.TrimRight(p.PublicBase, "/")
@@ -1236,6 +1250,9 @@ func (g *Gate) pushRequest(p Push, a Request) {
 		return strings.NewReplacer("[", "［", "]", "］", "(", "（", ")", "）", "<", "＜", ">", "＞", "`", "ˋ").Replace(v)
 	}
 	text := fmt.Sprintf("设备申请上网\n昵称：%s\nMAC：%s\n理由：%s\n申请时间：%s\n有效期：30 分钟", safeVisitor(a.Name), a.MAC, safeVisitor(a.Reason), time.Unix(a.Created, 0).In(zone).Format("2006-01-02 15:04:05"))
+	return g.sendPush(p, "设备申请上网", text, allow, deny, &a)
+}
+func (g *Gate) sendPush(p Push, title, text, allow, deny string, a *Request) error {
 	var e error
 	if p.Kind == "smtp" {
 		e = g.sendMail(p, text, allow, deny)
@@ -1245,7 +1262,7 @@ func (g *Gate) pushRequest(p Push, a Request) {
 		case "wecom":
 			payload = map[string]any{"msgtype": "markdown", "markdown": map[string]string{"content": text + "\n[同意上网](" + allow + ")  [拒绝上网](" + deny + ")"}}
 		case "feishu":
-			payload = map[string]any{"msg_type": "interactive", "card": map[string]any{"header": map[string]any{"title": map[string]string{"tag": "plain_text", "content": "设备申请上网"}}, "elements": []any{map[string]any{"tag": "div", "text": map[string]string{"tag": "plain_text", "content": text}}, map[string]any{"tag": "action", "actions": []any{map[string]any{"tag": "button", "text": map[string]string{"tag": "plain_text", "content": "同意上网"}, "type": "primary", "url": allow}, map[string]any{"tag": "button", "text": map[string]string{"tag": "plain_text", "content": "拒绝上网"}, "url": deny}}}}}}
+			payload = map[string]any{"msg_type": "interactive", "card": map[string]any{"header": map[string]any{"title": map[string]string{"tag": "plain_text", "content": title}}, "elements": []any{map[string]any{"tag": "div", "text": map[string]string{"tag": "plain_text", "content": text}}, map[string]any{"tag": "action", "actions": []any{map[string]any{"tag": "button", "text": map[string]string{"tag": "plain_text", "content": "同意上网"}, "type": "primary", "url": allow}, map[string]any{"tag": "button", "text": map[string]string{"tag": "plain_text", "content": "拒绝上网"}, "url": deny}}}}}}
 			if p.Secret != "" {
 				timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 				h := hmac.New(sha256.New, []byte(timestamp+"\n"+p.Secret))
@@ -1254,10 +1271,24 @@ func (g *Gate) pushRequest(p Push, a Request) {
 				m["sign"] = base64.StdEncoding.EncodeToString(h.Sum(nil))
 			}
 		default:
-			payload = map[string]any{"title": "设备申请上网", "content": text, "request": a, "allow_url": allow, "deny_url": deny}
+			payload = map[string]any{"title": title, "content": text, "request": a, "allow_url": allow, "deny_url": deny}
+		}
+		if allow == "" {
+			switch p.Kind {
+			case "wecom":
+				payload = map[string]any{"msgtype": "text", "text": map[string]string{"content": title + "\n" + text}}
+			case "feishu":
+				m := payload.(map[string]any)
+				m["msg_type"] = "text"
+				m["content"] = map[string]string{"text": title + "\n" + text}
+				delete(m, "card")
+			}
 		}
 		b, _ := json.Marshal(payload)
-		req, _ := http.NewRequestWithContext(g.ctx, "POST", p.URL, strings.NewReader(string(b)))
+		req, requestErr := http.NewRequestWithContext(g.ctx, "POST", p.URL, strings.NewReader(string(b)))
+		if requestErr != nil {
+			return requestErr
+		}
 		req.Header.Set("Content-Type", "application/json")
 		if p.Kind == "webhook" && p.Secret != "" {
 			req.Header.Set("Authorization", "Bearer "+p.Secret)
@@ -1280,6 +1311,10 @@ func (g *Gate) pushRequest(p Push, a Request) {
 			}
 		}
 	}
+	return e
+}
+func (g *Gate) pushRequest(p Push, a Request) {
+	e := g.sendRequest(p, a)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if e != nil {
@@ -1287,7 +1322,7 @@ func (g *Gate) pushRequest(p Push, a Request) {
 	} else {
 		g.event("push", p.Kind+" 推送已发送")
 	}
-	g.save()
+	_ = g.save()
 }
 func safeError(s string, p Push) string {
 	for _, v := range []string{p.URL, p.Secret, p.SMTPPassword} {
@@ -1319,6 +1354,9 @@ func (g *Gate) sendMail(p Push, text, allow, deny string) error {
 	}
 	defer os.RemoveAll(temp)
 	msg := "From: " + p.SMTPFrom + "\r\nTo: " + p.SMTPTo + "\r\nSubject: =?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte("UFI-Gate 上网审批请求")) + "?=\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<div style=\"font-family:sans-serif\"><h2>设备申请上网</h2><pre>" + htmlEscape(text) + "</pre><p><a href=\"" + htmlEscape(allow) + "\">同意上网</a> · <a href=\"" + htmlEscape(deny) + "\">拒绝上网</a></p></div>"
+	if allow == "" {
+		msg = "From: " + p.SMTPFrom + "\r\nTo: " + p.SMTPTo + "\r\nSubject: UFI-Gate notification\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + text
+	}
 	if e = os.WriteFile(filepath.Join(temp, "body"), []byte(msg), 0600); e != nil {
 		return e
 	}
@@ -1465,6 +1503,8 @@ func (g *Gate) adminHandler() http.Handler {
 			staticFile(w, r, "style.css")
 		} else if r.URL.Path == "/admin.js" {
 			staticFile(w, r, "admin.js")
+		} else if r.URL.Path == "/admin-updates.js" {
+			staticFile(w, r, "admin-updates.js")
 		} else if r.URL.Path == "/" {
 			staticFile(w, r, "admin.html")
 		} else {
@@ -1494,7 +1534,9 @@ func main() {
 	cleanupOnly := flag.Bool("cleanup-rules", false, "仅清除规则，用于 supervisor 崩溃恢复")
 	setup := flag.Bool("setup-token", false, "重新生成初始化 token（仅未初始化）")
 	resetAdmin := flag.Bool("reset-admin", false, "通过本地控制通道重置管理员，保留联网设备")
-	flag.Parse()
+	if updateCLIFlags() {
+		return
+	}
 	os.MkdirAll(dir, 0700)
 	if *resetAdmin {
 		if e := requestAdminReset(); e != nil {
@@ -1539,7 +1581,7 @@ func main() {
 		log.Fatal(e)
 	}
 	defer lock.Close()
-	if e = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
+	if e = lockFile(lock); e != nil {
 		log.Fatal("服务已运行")
 	}
 	if demo {
@@ -1594,10 +1636,15 @@ func main() {
 			g.event("error", "开机恢复失败: "+e.Error())
 		}
 	}
-	g.event("service", "服务启动 "+version)
-	g.save()
+	g.event("service", "服务启动 "+currentVersion())
+	if e = g.save(); e != nil {
+		log.Printf("启动状态保存失败: %v", e)
+	} else {
+		g.ready = true
+	}
 	g.mu.Unlock()
 	go g.loop()
+	go g.notificationLoop()
 	if !demo {
 		go g.watchHost()
 	}

@@ -35,7 +35,11 @@ stop_worker() {
   rm -f "$DIR/worker.pid"
 }
 case "$1" in
- start)
+ start|start-update)
+  if [ "$1" = start ] && [ -f "$DIR/update-journal.json" ]; then
+    "$DIR/update-runner" --dir "$DIR" --resume-update >> "$DIR/update.log" 2>&1
+    exit $?
+  fi
   rm -f "$DIR/stopped" "$DIR/suspended"
   if alive "$DIR/supervisor.pid"; then echo 'ok'; exit 0; fi
   rm -rf "$DIR/supervisor.lock"
@@ -45,6 +49,10 @@ case "$1" in
   echo 'ok'
   ;;
  boot)
+  if [ -f "$DIR/update-journal.json" ]; then
+    "$DIR/update-runner" --dir "$DIR" --resume-update >> "$DIR/update.log" 2>&1
+    exit $?
+  fi
   [ -f "$DIR/stopped" ] && exit 0
   [ -f "$DIR/suspended" ] && exit 0
   # Boot hook may run before WiFi/data services; delay the worker but don't block the host boot script.
@@ -77,12 +85,18 @@ case "$1" in
   done
   rmdir "$DIR/supervisor.lock" 2>/dev/null
   ;;
- stop|recover)
+ stop|recover|stop-update)
   touch "$DIR/stopped"
   if alive "$DIR/supervisor.pid"; then kill "$PID" 2>/dev/null; fi
   stop_worker
-  "$BIN" --dir "$DIR" --recover || exit 1
-  unhook || exit 1
+  # Do not recover/load state until the old worker has actually released its lock.
+  I=0
+  while alive "$DIR/supervisor.pid" && [ "$I" -lt 10 ]; do sleep 1; I=$((I+1)); done
+  if alive "$DIR/supervisor.pid"; then echo 'supervisor did not stop'; exit 1; fi
+  if ! "$BIN" --dir "$DIR" --recover; then
+    [ "$1" = stop-update ] && "$DIR/update-backup/ufi-gate" --dir "$DIR" --cleanup-rules || exit 1
+  fi
+  if [ "$1" = stop-update ]; then hook || exit 1; else unhook || exit 1; fi
   rm -f "$DIR/supervisor.pid"
   rm -rf "$DIR/supervisor.lock"
   echo 'ok'

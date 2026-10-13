@@ -9,6 +9,7 @@ import pathlib
 import re
 import subprocess
 import zipfile
+import tarfile
 
 root = pathlib.Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser()
@@ -54,7 +55,23 @@ with zipfile.ZipFile(source, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as arch
             raise RuntimeError(f'Unexpected generated or private path: {rel}')
         archive.write(root / rel, str(pathlib.Path('UFI-Gate') / rel))
     archive.write(out / 'build-info.json', 'UFI-Gate/build-info.json')
-assets = plugins + [source, out / 'build-info.json']
+update_manifest = json.loads((out / 'update.json').read_text(encoding='utf-8'))
+assert update_manifest['version'] == version
+update_assets = []
+for a in update_manifest['assets']:
+    item = out / a['name']
+    assert item.stat().st_size == a['size']
+    assert hashlib.sha256(item.read_bytes()).hexdigest() == a['sha256']
+    build = next(b for b in manifest['builds'] if b['arch'] == a['arch'])
+    with tarfile.open(item, 'r:gz') as archive:
+        assert set(archive.getnames()) == {'ufi-gate', 'service.sh', 'emergency-recover.sh'}
+        assert all(m.isfile() for m in archive.getmembers())
+        assert archive.extractfile('ufi-gate').read() == (out / build['binary']).read_bytes()
+    update_assets.append(item)
+assets = plugins + update_assets + [source, out / 'build-info.json', out / 'update.json']
+if manifest.get('signed_updates'):
+    assert (out / 'update.json.sig').is_file()
+    assets.append(out / 'update.json.sig')
 (out / 'SHA256SUMS').write_text(''.join(
     f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in assets
 ))
