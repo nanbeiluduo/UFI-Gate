@@ -774,7 +774,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 				requests = append(requests, a)
 			}
 			sort.Slice(requests, func(i, j int) bool { return requests[i].Created > requests[j].Created })
-			reply(w, 200, map[string]any{"enabled": g.db.Config.Enabled, "uptime": int(time.Since(g.started).Seconds()), "devices": devices, "requests": requests, "today": today, "month": month, "total": total, "up": up, "down": down, "online": online, "approved": approved, "limited": limited, "blocked": g.blockedPackets, "blackHits": g.blackPackets, "rates": g.rates, "version": currentVersion()})
+			reply(w, 200, map[string]any{"enabled": g.db.Config.Enabled, "uptime": int(time.Since(g.started).Seconds()), "devices": devices, "requests": requests, "today": today, "month": month, "total": total, "up": up, "down": down, "online": online, "approved": approved, "limited": limited, "blocked": g.blockedPackets, "blackHits": g.blackPackets, "rates": g.rates, "version": currentVersion(), "arch": buildArch()})
 		case "/admin-api/config":
 			c := g.db.Config
 			c.AdminHash = ""
