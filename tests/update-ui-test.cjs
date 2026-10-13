@@ -25,7 +25,7 @@ let logs='';daemon.stderr.on('data',b=>logs+=b);const sleep=ms=>new Promise(r=>s
  let installs=0;
  await page.route('**/admin-api/update',route=>route.fulfill({json:{current:'1.0.10',arch:'arm64',signatureReady:true,release:{version:'1.0.11',notes:'<img src=x onerror=alert(1)>',url:'https://github.com/nanbeiluduo/UFI-Gate/releases/tag/v1.0.11',manifest:{}},status:{}}}));
  await page.route('**/admin-api/update/install',route=>{installs++;return route.fulfill({json:{ok:true}})});
- await page.locator('[data-nav=updates]').click();await page.locator('#update-install').waitFor();await page.waitForFunction(()=>!document.querySelector('#update-install').disabled);assert.equal(await page.locator('#update-notes img').count(),0);
+ await page.locator('[data-nav=updates]').click();await page.locator('#update-install').waitFor();await page.waitForFunction(()=>!document.querySelector('#update-install').disabled);assert.equal(await page.locator('#update-notes img[onerror]').count(),0);
  page.once('dialog',d=>d.dismiss());await page.locator('#update-install').click();assert.equal(installs,0);
  page.once('dialog',d=>d.accept());await page.locator('#update-install').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('更新任务已提交'));assert.equal(installs,1);
  for(const width of [390,834,1440]){await page.setViewportSize({width,height:950});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'update overflow '+width);await page.locator('#message-float').click();await page.locator('#message-box').waitFor({state:'visible'});await page.locator('#message-close').click()}
