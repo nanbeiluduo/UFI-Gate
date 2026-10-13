@@ -71,7 +71,46 @@ func officialURL(raw string) bool {
 	if e != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
 		return false
 	}
-	return contains([]string{"api.github.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"}, u.Hostname())
+	return contains([]string{
+		"api.github.com", "github.com",
+		"release-assets.githubusercontent.com", "objects.githubusercontent.com",
+		// 公共 GitHub 加速镜像（仅作为传输通道，最终内容仍经 Ed25519 签名与 SHA-256 校验）
+		"ghfast.top", "gh-proxy.com", "ghproxy.net", "mirror.ghproxy.com",
+	}, u.Hostname())
+}
+
+// mirrorPrefixes 是 release 附件下载的候选前缀，按顺序尝试。
+// 空字符串表示直连 github.com；其余为公共加速镜像，格式为 https://<host>/<原 github URL>。
+// 所有候选最终都返回同一份签名过的 update.json / update.tar.gz，安全由签名与哈希兜底。
+var mirrorPrefixes = []string{
+	"",
+	"https://ghfast.top/",
+	"https://gh-proxy.com/",
+	"https://ghproxy.net/",
+	"https://mirror.ghproxy.com/",
+}
+
+func releaseAssetURLs(path string) []string {
+	base := "https://github.com/" + releaseRepo + "/" + path
+	urls := make([]string, 0, len(mirrorPrefixes))
+	for _, p := range mirrorPrefixes {
+		urls = append(urls, p+base)
+	}
+	return urls
+}
+
+// fetchReleaseAsset 按 mirrorPrefixes 顺序尝试拉取某 release 附件，
+// 返回第一个成功的响应体。所有候选都失败时汇总错误。
+func fetchReleaseAsset(ctx context.Context, c *http.Client, path string, limit int64) ([]byte, error) {
+	var errs []string
+	for _, u := range releaseAssetURLs(path) {
+		body, e := fetchUpdate(ctx, c, u, limit)
+		if e == nil {
+			return body, nil
+		}
+		errs = append(errs, e.Error())
+	}
+	return nil, fmt.Errorf("所有下载源均失败（%d 个）：%s", len(errs), strings.Join(errs, " | "))
 }
 func (g *Gate) updateClient() *http.Client {
 	return &http.Client{Transport: g.httpClient.Transport, Timeout: 5 * time.Minute, CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -165,11 +204,10 @@ func (g *Gate) checkRelease() ReleaseInfo {
 	if e == nil {
 		info.URL = "https://github.com/" + releaseRepo + "/releases/tag/v" + info.Version
 		info.Notes = release.Body
-		base := "https://github.com/" + releaseRepo + "/releases/download/v" + info.Version + "/"
 		var manifest, signature []byte
-		manifest, e = fetchUpdate(ctx, c, base+"update.json", 64<<10)
+		manifest, e = fetchReleaseAsset(ctx, c, "releases/download/v"+info.Version+"/update.json", 64<<10)
 		if e == nil {
-			signature, e = fetchUpdate(ctx, c, base+"update.json.sig", 1024)
+			signature, e = fetchReleaseAsset(ctx, c, "releases/download/v"+info.Version+"/update.json.sig", 1024)
 		}
 		if e == nil {
 			var m UpdateManifest
@@ -285,7 +323,7 @@ func (g *Gate) downloadAndLaunch(m UpdateManifest, job UpdateStatus, lock *os.Fi
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 6*time.Minute)
 	defer cancel()
-	data, e := fetchUpdate(ctx, g.updateClient(), "https://github.com/"+releaseRepo+"/releases/download/v"+m.Version+"/"+asset.Name, asset.Size)
+	data, e := fetchReleaseAsset(ctx, g.updateClient(), "releases/download/v"+m.Version+"/"+asset.Name, asset.Size)
 	if e != nil {
 		return e
 	}
