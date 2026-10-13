@@ -40,7 +40,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.1.1"
+const version = "1.1.2"
 
 var dir string
 var demo bool
@@ -947,6 +947,11 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 			d.SessionBase = 0
 			d.PeriodBase = 0
 			d.LimitReason = ""
+		case "delete":
+			// 删除设备记录：下次扫描到该 MAC 时 device() 会重新创建一个全新设备
+			// （无信任、无封禁、无授权、无流量统计），等同新访客接入。
+			// 管理员权限（Config.AdminMACs）不在此清除，需单独走 admin-remove。
+			delete(g.db.Devices, v.MAC)
 		case "edit":
 			if len(v.Note) > 100 {
 				e = errors.New("备注过长")
