@@ -40,7 +40,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.0.8"
+const version = "1.0.7"
 
 var dir string
 var demo bool
@@ -904,11 +904,9 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		case "block":
 			d.Banned = true
 			d.Until = 0
-			g.kickStation(v.MAC)
 		case "revoke":
 			d.Until = 0
 			d.Trusted = false
-			g.kickStation(v.MAC)
 		case "trust":
 			d.Trusted = true
 			d.Banned = false
