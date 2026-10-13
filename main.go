@@ -1510,6 +1510,10 @@ func (g *Gate) adminHandler() http.Handler {
 			staticFile(w, r, "admin.js")
 		} else if r.URL.Path == "/admin-updates.js" {
 			staticFile(w, r, "admin-updates.js")
+		} else if r.URL.Path == "/marked.min.js" {
+			staticFile(w, r, "marked.min.js")
+		} else if r.URL.Path == "/purify.min.js" {
+			staticFile(w, r, "purify.min.js")
 		} else if r.URL.Path == "/" {
 			staticFile(w, r, "admin.html")
 		} else {
