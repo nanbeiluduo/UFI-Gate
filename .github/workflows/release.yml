@@ -115,12 +115,13 @@ jobs:
           qemu-arm dist/ufi-gate-arm32 -h
           qemu-aarch64 dist/ufi-gate-arm64 -h
 
-      - name: Update README for release
+      - name: Update README and version constant for release
         env:
           RELEASE_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           python3 scripts/update_readme.py "$RELEASE_VERSION"
-          git diff --stat README.md || true
+          sed -i 's|const version = "[^"]*"|const version = "'"$RELEASE_VERSION"'"|' main.go
+          git diff --stat README.md main.go || true
 
       - name: Commit and push README back to branch
         env:
@@ -130,12 +131,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
+          git add README.md main.go
           branch="${{ inputs.branch || 'main' }}"
           if git diff --cached --quiet; then
-            echo "README already up to date"
+            echo "README and version already up to date"
           else
-            git commit -m "docs: update README for ${{ steps.ver.outputs.tag }}"
+            git commit -m "chore: bump version to ${{ steps.ver.outputs.tag }} and update README"
             git push origin "HEAD:${branch}"
           fi
 
