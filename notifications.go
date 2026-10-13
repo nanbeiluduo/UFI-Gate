@@ -130,6 +130,23 @@ func (g *Gate) notificationsAPI(w http.ResponseWriter, r *http.Request) bool {
 			}
 			e = g.save()
 		}
+	case "/admin-api/notifications/delete":
+		var v struct {
+			All  bool
+			Read bool
+		}
+		e = body(w, r, &v)
+		if e == nil {
+			kept := g.db.Notifications[:0]
+			for _, n := range g.db.Notifications {
+				if v.All || (v.Read && n.Read) {
+					continue
+				}
+				kept = append(kept, n)
+			}
+			g.db.Notifications = kept
+			e = g.save()
+		}
 	case "/admin-api/notifications/settings":
 		var v struct{ Push map[string]bool }
 		e = body(w, r, &v)

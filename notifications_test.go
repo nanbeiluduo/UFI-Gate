@@ -47,6 +47,29 @@ func TestNotificationDedupPersistenceAndPreferences(t *testing.T) {
 		t.Fatal("unbounded history")
 	}
 }
+func TestNotificationDeleteReadAndClear(t *testing.T) {
+	g := testGate(t)
+	a := g.notify("admin", "read-one", "system", random(8), false)
+	a.Read = true
+	b := g.notify("admin", "unread-one", "system", random(8), false)
+	c := g.notify("admin", "read-two", "system", random(8), false)
+	c.Read = true
+	if len(g.db.Notifications) != 3 {
+		t.Fatal("setup")
+	}
+	if w := call(g.adminHandler(), "/admin-api/notifications/delete", "POST", map[string]any{"Read": true}, true, g); w.Code != 200 {
+		t.Fatalf("delete-read: %d %s", w.Code, w.Body.String())
+	}
+	if len(g.db.Notifications) != 1 || g.db.Notifications[0].ID != b.ID {
+		t.Fatalf("delete-read left %d", len(g.db.Notifications))
+	}
+	if w := call(g.adminHandler(), "/admin-api/notifications/delete", "POST", map[string]any{"All": true}, true, g); w.Code != 200 {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+	if len(g.db.Notifications) != 0 {
+		t.Fatalf("clear left %d", len(g.db.Notifications))
+	}
+}
 func TestUpdateAndNotificationAPIsRequireLogin(t *testing.T) {
 	g := testGate(t)
 	for _, p := range []string{"/admin-api/update", "/admin-api/notifications"} {
