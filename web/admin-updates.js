@@ -33,7 +33,7 @@ window.createUpdateUI = ({api, esc, stamp, toast, navigate}) => {
     $('update-latest').textContent=r.version||'尚未检查';
     $('update-checked').textContent=stamp(r.checked);
     $('update-status').textContent=(update.checking?'正在检查 GitHub…\n':'')+(s.phase?(phases[s.phase]||s.phase)+'：'+s.message+'\n':'')+(r.error?'检查提示：'+r.error:(!newer(r.version,update.current)&&r.version?'当前服务已是此发布渠道的最新版本。':''));
-    $('update-notes').textContent=r.notes||'检查更新后显示版本说明。';
+    $('update-notes').innerHTML=window.DOMPurify?DOMPurify.sanitize(marked.parse(r.notes||'检查更新后显示版本说明。')):marked.parse(r.notes||'检查更新后显示版本说明。');
     $('update-check').disabled=update.checking||active;
     $('update-install').disabled=active||update.checking||!update.signatureReady||!!r.error||!r.manifest||!newer(r.version,update.current);
     $('update-install').textContent=active?'更新进行中…':'安装已验证的新版本';
@@ -41,7 +41,7 @@ window.createUpdateUI = ({api, esc, stamp, toast, navigate}) => {
   }
   async function renderUpdates(){
     update=await api('update');
-    $('view').innerHTML='<article class="card" id="update-panel"><h2>更新管理</h2><div class="update-facts"><p>当前服务 <strong id="update-current"></strong></p><p>最新正式版本 <strong id="update-latest"></strong></p><p>上次检查 <span id="update-checked"></span></p></div><div class="row"><button id="update-check" class="primary">检查更新</button><button id="update-install">安装已验证的新版本</button><a id="update-release" target="_blank" rel="noopener noreferrer" hidden>版本说明与下载</a></div><p class="note">更新会短暂停服并关闭认证，保留管理员、设备、配额、流量和自定义图片。安装后请重新登录，确认状态后手动开启认证。关闭浏览器不会取消已提交的更新。</p><pre id="update-status" role="status" aria-live="polite"></pre><div class="checks"><label><input id="update-auto" type="checkbox" '+(update.autoCheck?'checked':'')+'>每天自动检查并通知（安装仍需手动确认）</label></div><button id="update-save">保存检查设置</button><h3>版本说明</h3><pre id="update-notes" class="update-notes"></pre></article>';
+    $('view').innerHTML='<article class="card" id="update-panel"><h2>更新管理</h2><div class="update-facts"><p>当前服务 <strong id="update-current"></strong></p><p>最新正式版本 <strong id="update-latest"></strong></p><p>上次检查 <span id="update-checked"></span></p></div><div class="row"><button id="update-check" class="primary">检查更新</button><button id="update-install">安装已验证的新版本</button><a id="update-release" target="_blank" rel="noopener noreferrer" hidden>版本说明与下载</a></div><p class="note">更新会短暂停服并关闭认证，保留管理员、设备、配额、流量和自定义图片。安装后请重新登录，确认状态后手动开启认证。关闭浏览器不会取消已提交的更新。</p><pre id="update-status" role="status" aria-live="polite"></pre><div class="checks"><label><input id="update-auto" type="checkbox" '+(update.autoCheck?'checked':'')+'>每天自动检查并通知（安装仍需手动确认）</label></div><button id="update-save">保存检查设置</button><h3>版本说明</h3><div id="update-notes" class="update-notes"></div></article>';
     renderUpdateStatus();
     $('update-check').onclick=()=>perform(async()=>{ $('update-check').disabled=true;await api('update/check',{});await refresh()});
     $('update-save').onclick=()=>perform(async()=>{await api('update/settings',{AutoCheck:$('update-auto').checked});toast('检查设置已保存')});
