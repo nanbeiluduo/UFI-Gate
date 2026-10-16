@@ -81,6 +81,8 @@ jobs:
           go vet -mod=vendor ./...
           node --check web/admin.js
           node --check web/admin-updates.js
+          node --check web/admin-access.js
+          node --check web/recovery.js
           node --check web/portal.js
           sh -n service.sh
           sh -n emergency-recover.sh

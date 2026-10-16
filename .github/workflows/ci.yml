@@ -26,6 +26,8 @@ jobs:
           go vet -mod=vendor ./...
           node --check web/admin.js
           node --check web/admin-updates.js
+          node --check web/admin-access.js
+          node --check web/recovery.js
           node --check web/portal.js
           node --check tests/ui-test.cjs
           sh -n service.sh
@@ -45,6 +47,7 @@ jobs:
           go build -mod=vendor -buildvcs=false -o ufi-gate-demo .
           node tests/update-ui-test.cjs
           node tests/management-ui-test.cjs
+          node tests/recovery-ui-test.cjs
 
       - name: Execute ARM32 and ARM64 tests under QEMU
         run: |
