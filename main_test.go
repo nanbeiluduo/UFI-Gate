@@ -81,6 +81,7 @@ func TestSetupTokenAndIdentity(t *testing.T) {
 	}
 	v["Token"] = g.bootToken
 	w = call(g.adminHandler(), "/admin-api/setup", "POST", v, false, g)
+	w = finishRecovery(t, g, w, "127.0.0.1")
 	if w.Code != 200 || g.db.Config.AdminMAC != "02:00:00:00:00:02" {
 		t.Fatal(w.Body.String())
 	}

@@ -1,10 +1,11 @@
+const {saveRecovery}=require('./recovery-helper.cjs');
 /* Local integration/viewport test. npm install playwright; supply CHROME_PATH if needed.
  * Starts a --demo service as a child so it never alters system firewall/network settings.
  */
 const {chromium}=require('playwright');
 const fs=require('fs'),os=require('os'),path=require('path'),{spawn}=require('child_process');
 const root=path.resolve(__dirname,'..'),state=fs.mkdtempSync(path.join(os.tmpdir(),'ufi-gate-ui-'));
-const daemon=spawn(path.join(root,'ufi-gate-demo'),['--demo','--dir',state],{stdio:['ignore','pipe','pipe']});
+const daemon=spawn(process.env.DEMO_BINARY||path.join(root,'ufi-gate-demo'),['--demo','--dir',state],{stdio:['ignore','pipe','pipe']});
 let log='';daemon.stderr.on('data',b=>log+=b);const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const assert=(v,msg)=>{if(!v)throw Error(msg)};
 (async()=>{let browser;try{
@@ -12,7 +13,7 @@ const assert=(v,msg)=>{if(!v)throw Error(msg)};
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||undefined,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  const token=fs.readFileSync(path.join(state,'setup.token'),'utf8').trim();
- await page.goto('http://127.0.0.1:8081/#'+token);await page.locator('#user').fill('admin');await page.locator('#pass').fill('AdminPass123');await page.locator('#loginbtn').click();await page.locator('#view').waitFor();
+ await page.goto('http://127.0.0.1:8081/#'+token);await page.locator('#user').fill('admin');await page.locator('#pass').fill('AdminPass123');await page.locator('#loginbtn').click();await saveRecovery(page);await page.locator('#view').waitFor();
  async function api(p,v){const res=await context.request.post('http://127.0.0.1:8081/admin-api/'+p,{data:v,headers:{Origin:'http://127.0.0.1:8081'}});assert(res.ok(),p+': '+await res.text());return res.json()}
  await api('account',{Name:'guest',Password:'GuestPass123',Action:'create'});
  await api('device',{MAC:'02:00:00:00:00:22',Action:'trust'});await api('device',{MAC:'02:00:00:00:00:33',Action:'block'});
@@ -20,7 +21,7 @@ const assert=(v,msg)=>{if(!v)throw Error(msg)};
  fs.mkdirSync(path.join(root,'tests','screenshots'),{recursive:true});let checked=0;
  for(const width of [390,834,1440]){await page.setViewportSize({width,height:1000});for(const panel of ['dashboard','devices','approvals','accounts','auth','policy','appearance','push','system','logs']){if(width<768)await page.locator('#menu').click();await page.locator('[data-nav='+panel+']').click();await sleep(150);const dimensions=await page.evaluate(()=>({vw:innerWidth,sw:document.documentElement.scrollWidth}));assert(dimensions.sw<=dimensions.vw+1,`overflow ${panel} @ ${width}: ${dimensions.sw}`);checked++}if(width<768)await page.locator('#menu').click();await page.locator('[data-nav=dashboard]').click();await sleep(250);await page.screenshot({path:path.join(root,'tests','screenshots','admin-'+width+'.png'),fullPage:true})}
  await api('device',{MAC:'02:00:00:00:00:02',Action:'revoke'});
- const portal=await context.newPage();portal.on('pageerror',e=>errors.push(e.message));await portal.setViewportSize({width:390,height:844});await portal.goto('http://127.0.0.1:8080/');await portal.locator('#username').fill('guest');await portal.locator('#password').fill('WrongPass123');await portal.locator('#submit').click();await portal.getByText('认证未通过，请检查后重试').waitFor();await portal.locator('#password').fill('GuestPass123');await portal.locator('#submit').click();await portal.getByRole('heading',{name:'连接成功'}).waitFor();
+ const portal=await context.newPage();portal.on('pageerror',e=>errors.push(e.message));await portal.setViewportSize({width:390,height:844});await portal.goto('http://127.0.0.1:8090/');await portal.locator('#username').fill('guest');await portal.locator('#password').fill('WrongPass123');await portal.locator('#submit').click();await portal.getByText('认证未通过，请检查后重试').waitFor();await portal.locator('#password').fill('GuestPass123');await portal.locator('#submit').click();await portal.getByRole('heading',{name:'连接成功'}).waitFor();
  await api('device',{MAC:'02:00:00:00:00:02',Action:'revoke'});await portal.reload();await portal.locator('[data-method=captcha]').click();await portal.waitForFunction(()=>document.getElementById('captcha')?.getAttribute('src')?.startsWith('data:'));
  const src=await portal.locator('#captcha').getAttribute('src'),svg=decodeURIComponent(src.split(',').slice(1).join(',')),answer=[...svg.matchAll(/>([A-Z0-9])<\/text>/g)].map(m=>m[1]).join('');assert(answer.length===5,'captcha SVG not rendered');await portal.locator('#answer').fill(answer);await portal.locator('#submit').click();await portal.getByRole('heading',{name:'连接成功'}).waitFor();
  await api('device',{MAC:'02:00:00:00:00:02',Action:'revoke'});await portal.reload();await portal.locator('[data-method=approval]').click();await portal.locator('#name').fill('测试访客');await portal.locator('#reason').fill('集成测试');await portal.locator('#submit').click();await portal.getByRole('heading',{name:'正在等待管理员'}).waitFor();

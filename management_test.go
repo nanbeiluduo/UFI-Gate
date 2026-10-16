@@ -66,6 +66,9 @@ func TestAdminResetPreservesNetworkAndReinitializes(t *testing.T) {
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		g.adminHandler().ServeHTTP(w, r)
+		if w.Code == 200 {
+			w = finishRecovery(t, g, w, "192.168.0.23")
+		}
 		return w
 	}
 	if w := setup(oldToken); w.Code != 403 {

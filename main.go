@@ -7,7 +7,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"embed"
@@ -79,6 +78,7 @@ type Push struct {
 	SMTPPort                                                                          int
 }
 type Config struct {
+	RecoveryHash                                                              string
 	NotifyPush                                                                map[string]bool
 	AutoUpdateCheck                                                           bool
 	AdminMACs                                                                 []string
@@ -127,29 +127,32 @@ type Challenge struct {
 	Expires     int64
 }
 type Gate struct {
-	ready                           bool
-	release                         ReleaseInfo
-	updateChecking, updatePreparing bool
-	mu                              sync.Mutex
-	db                              DB
-	sessions                        map[string]Session
-	attempts                        map[string]Attempt
-	challenges                      map[string]Challenge
-	counters                        map[string]uint64
-	resolvedWhite, resolvedBlack    map[string]int64
-	bootToken                       string
-	bootExpiry                      int64
-	fw                              *Firewall
-	started                         time.Time
-	rates                           []RatePoint
-	lastSample                      time.Time
-	ctx                             context.Context
-	cancel                          context.CancelFunc
-	httpClient                      *http.Client
-	dnsSlots                        chan struct{}
-	countersDay                     string
-	blockedPackets, blackPackets    uint64
-	blockCounters                   map[string]uint64
+	recoveries                         map[string]*adminRecovery
+	recoveryWindow, recoveryBlocked    int64
+	recoveryRequests, recoveryFailures int
+	ready                              bool
+	release                            ReleaseInfo
+	updateChecking, updatePreparing    bool
+	mu                                 sync.Mutex
+	db                                 DB
+	sessions                           map[string]Session
+	attempts                           map[string]Attempt
+	challenges                         map[string]Challenge
+	counters                           map[string]uint64
+	resolvedWhite, resolvedBlack       map[string]int64
+	bootToken                          string
+	bootExpiry                         int64
+	fw                                 *Firewall
+	started                            time.Time
+	rates                              []RatePoint
+	lastSample                         time.Time
+	ctx                                context.Context
+	cancel                             context.CancelFunc
+	httpClient                         *http.Client
+	dnsSlots                           chan struct{}
+	countersDay                        string
+	blockedPackets, blackPackets       uint64
+	blockCounters                      map[string]uint64
 }
 type RatePoint struct {
 	Time     int64
@@ -487,6 +490,11 @@ func (g *Gate) publicDevice(d *Device) map[string]any {
 }
 func (g *Gate) cleanupEphemeral() {
 	now := time.Now().Unix()
+	for id, p := range g.recoveries {
+		if p.Expires < now {
+			delete(g.recoveries, id)
+		}
+	}
 	for k, s := range g.sessions {
 		if now-s.Last > 1800 {
 			delete(g.sessions, k)
@@ -681,7 +689,11 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 200, map[string]any{"version": currentVersion(), "setup": g.db.Config.AdminHash == ""})
 		return
 	}
-	if (path == "/admin-api/login" || path == "/admin-api/setup") && r.Method == "POST" {
+	if path == "/admin-api/setup" && r.Method == "POST" {
+		g.prepareAdminSetup(w, r)
+		return
+	}
+	if path == "/admin-api/login" && r.Method == "POST" {
 		var v struct{ Username, Password, Token string }
 		if e := body(w, r, &v); e != nil {
 			fail(w, e)
@@ -692,54 +704,32 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 			reply(w, 429, map[string]string{"error": "密码错误过多，请在 10 分钟后重试"})
 			return
 		}
-		if path == "/admin-api/setup" {
-			if g.db.Config.AdminHash != "" || g.bootToken == "" || time.Now().Unix() > g.bootExpiry || subtle.ConstantTimeCompare([]byte(v.Token), []byte(g.bootToken)) != 1 {
-				reply(w, 403, map[string]string{"error": "初始化凭证无效或已过期，请在插件中重新生成"})
-				return
-			}
-			if !strong(v.Password) || len(v.Username) < 1 || len(v.Username) > 64 {
-				fail(w, errors.New("账号不可为空，密码须至少 8 位且包含字母和数字"))
-				return
-			}
-			mac, e := g.peerMAC(r)
-			if e != nil {
-				fail(w, e)
-				return
-			}
-			oldConfig := g.db.Config
-			g.db.Config.AdminName = v.Username
-			g.db.Config.AdminHash = passwordHash(v.Password)
-			g.db.Config.AdminMAC = mac
-			g.db.Config.AdminMACs = []string{mac}
-			owner := g.device(mac)
-			oldOwner := *owner
-			owner.Trusted = true
-			owner.IP = peer(r)
-			if e = g.saveAdminChange(oldConfig); e != nil {
-				*owner = oldOwner
-				_ = g.save()
-				fail(w, e)
-				return
-			}
-			os.Remove(filepath.Join(dir, "setup.token"))
-			g.bootToken = ""
-			g.event("admin", "管理员初始化完成")
-		} else {
-			if v.Username != g.db.Config.AdminName || !passwordOK(g.db.Config.AdminHash, v.Password) {
-				g.badAttempt(key)
-				reply(w, 401, map[string]string{"error": "账号或密码错误"})
-				return
-			}
+		if g.db.Config.AdminHash == "" || v.Username != g.db.Config.AdminName || !passwordOK(g.db.Config.AdminHash, v.Password) {
+			g.badAttempt(key)
+			reply(w, 401, map[string]string{"error": "账号或密码错误"})
+			return
 		}
 		delete(g.attempts, key)
-		token := random(32)
-		g.sessions[token] = Session{time.Now().Unix(), peer(r)}
-		http.SetCookie(w, &http.Cookie{Name: "ug_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: 1800})
+		g.adminSession(w, r)
 		reply(w, 200, map[string]bool{"ok": true})
 		return
 	}
+
 	if !g.admin(w, r) {
 		reply(w, 401, map[string]string{"error": "请先登录管理后台"})
+		return
+	}
+	if path == "/admin-api/recovery-prepare" && r.Method == "POST" {
+		var v struct{}
+		if e := body(w, r, &v); e != nil {
+			fail(w, e)
+			return
+		}
+		if g.db.Config.RecoveryHash != "" {
+			fail(w, errors.New("已配置恢复密钥"))
+			return
+		}
+		g.prepareRecovery(w, r, "enroll", g.db.Config.AdminName, g.db.Config.AdminHash)
 		return
 	}
 	if g.updateAPI(w, r) || g.notificationsAPI(w, r) {
@@ -778,11 +768,12 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		case "/admin-api/config":
 			c := g.db.Config
 			c.AdminHash = ""
+			c.RecoveryHash = ""
 			c.SigningKey = ""
 			c.CaptchaSecret = ""
 			c.Push.Secret = ""
 			c.Push.SMTPPassword = ""
-			reply(w, 200, map[string]any{"config": c, "hasCaptchaSecret": g.db.Config.CaptchaSecret != "", "hasPushSecret": g.db.Config.Push.Secret != "", "hasSMTPPassword": g.db.Config.Push.SMTPPassword != ""})
+			reply(w, 200, map[string]any{"config": c, "hasRecoveryKey": g.db.Config.RecoveryHash != "", "hasCaptchaSecret": g.db.Config.CaptchaSecret != "", "hasPushSecret": g.db.Config.Push.Secret != "", "hasSMTPPassword": g.db.Config.Push.SMTPPassword != ""})
 		case "/admin-api/accounts":
 			a := []Account{}
 			for _, v := range g.db.Accounts {
@@ -824,6 +815,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		v.AdminMACs = old.AdminMACs
 		v.AdminName = old.AdminName
 		v.AdminHash = old.AdminHash
+		v.RecoveryHash = old.RecoveryHash
 		v.SigningKey = old.SigningKey
 		v.OffloadOriginal = old.OffloadOriginal
 		if v.CaptchaSecret == "" {
@@ -1450,11 +1442,18 @@ func (g *Gate) portalHandler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("/site-logo", g.siteLogo)
 	m.HandleFunc("/default-logo.png", defaultLogo)
+	m.HandleFunc("/api/admin-access/", g.portalAdminAPI)
 	m.HandleFunc("/api/", g.portalAPI)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/style.css":
 			staticFile(w, r, "style.css")
+		case "/admin-access":
+			staticFile(w, r, "admin-access.html")
+		case "/admin-access.js":
+			staticFile(w, r, "admin-access.js")
+		case "/recovery.js":
+			staticFile(w, r, "recovery.js")
 		case "/portal.js":
 			staticFile(w, r, "portal.js")
 		case "/":
@@ -1501,11 +1500,14 @@ func (g *Gate) adminHandler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("/site-logo", g.siteLogo)
 	m.HandleFunc("/default-logo.png", defaultLogo)
+	m.HandleFunc("/api/admin-access/", g.portalAdminAPI)
 	m.HandleFunc("/admin-api/", g.adminAPI)
 	m.HandleFunc("/approve", g.approvalPage)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/style.css" {
 			staticFile(w, r, "style.css")
+		} else if r.URL.Path == "/recovery.js" {
+			staticFile(w, r, "recovery.js")
 		} else if r.URL.Path == "/admin.js" {
 			staticFile(w, r, "admin.js")
 		} else if r.URL.Path == "/admin-updates.js" {

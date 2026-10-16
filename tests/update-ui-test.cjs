@@ -1,3 +1,4 @@
+const {saveRecovery}=require('./recovery-helper.cjs');
 // DEMO_BINARY=/path/to/demo CHROME_PATH=/path/to/browser node tests/update-ui-test.cjs
 const {chromium}=require('playwright');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
@@ -12,7 +13,7 @@ let logs='';daemon.stderr.on('data',b=>logs+=b);const sleep=ms=>new Promise(r=>s
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8081/#'+fs.readFileSync(path.join(state,'setup.token'),'utf8'));
  assert.equal(await page.locator('#message-float').count(),0);
- await page.locator('#user').fill('admin');await page.locator('#pass').fill('AdminPass123');await page.locator('#loginbtn').click();await page.locator('#message-float').waitFor();
+ await page.locator('#user').fill('admin');await page.locator('#pass').fill('AdminPass123');await page.locator('#loginbtn').click();await saveRecovery(page);await page.locator('#message-float').waitFor();
  for(const section of ['dashboard','devices','approvals','accounts','auth','policy','appearance','push','system','updates','logs']){await page.locator('[data-nav='+section+']').click();assert(await page.locator('#message-float').isVisible())}
  await page.locator('#message-float').click();await page.locator('.message-item').first().waitFor();await page.locator('#message-read-all').click();await page.waitForFunction(()=>document.querySelector('#message-count').textContent==='0');await page.locator('#message-close').click();
  await page.reload();await page.locator('#message-float').waitFor();assert.equal(await page.locator('#message-count').innerText(),'0');

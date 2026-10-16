@@ -132,6 +132,7 @@ func (g *Gate) resetAdmin() (string, error) {
 	if err := atomicWrite(filepath.Join(dir, "setup.token"), []byte(token)); err != nil {
 		return "", err
 	}
+	g.db.Config.RecoveryHash = ""
 	g.db.Config.AdminName = ""
 	g.db.Config.AdminHash = ""
 	g.db.Config.AdminMAC = ""
@@ -144,6 +145,9 @@ func (g *Gate) resetAdmin() (string, error) {
 		}
 		return "", err
 	}
+	g.recoveries = nil
+	g.recoveryWindow, g.recoveryBlocked = 0, 0
+	g.recoveryRequests, g.recoveryFailures = 0, 0
 	g.sessions = map[string]Session{}
 	g.attempts = map[string]Attempt{}
 	g.bootToken = token
