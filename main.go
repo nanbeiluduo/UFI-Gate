@@ -39,7 +39,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.1.8"
+const version = "1.1.9"
 
 var dir string
 var demo bool
@@ -78,6 +78,7 @@ type Push struct {
 	SMTPPort                                                                          int
 }
 type Config struct {
+	RemoteApproval                                                            RemoteApproval
 	RecoveryHash                                                              string
 	NotifyPush                                                                map[string]bool
 	AutoUpdateCheck                                                           bool
@@ -127,32 +128,36 @@ type Challenge struct {
 	Expires     int64
 }
 type Gate struct {
-	recoveries                         map[string]*adminRecovery
-	recoveryWindow, recoveryBlocked    int64
-	recoveryRequests, recoveryFailures int
-	ready                              bool
-	release                            ReleaseInfo
-	updateChecking, updatePreparing    bool
-	mu                                 sync.Mutex
-	db                                 DB
-	sessions                           map[string]Session
-	attempts                           map[string]Attempt
-	challenges                         map[string]Challenge
-	counters                           map[string]uint64
-	resolvedWhite, resolvedBlack       map[string]int64
-	bootToken                          string
-	bootExpiry                         int64
-	fw                                 *Firewall
-	started                            time.Time
-	rates                              []RatePoint
-	lastSample                         time.Time
-	ctx                                context.Context
-	cancel                             context.CancelFunc
-	httpClient                         *http.Client
-	dnsSlots                           chan struct{}
-	countersDay                        string
-	blockedPackets, blackPackets       uint64
-	blockCounters                      map[string]uint64
+	remoteServer                                    *http.Server
+	remoteWindow, remoteTestExpires, remoteTestSent int64
+	remoteRequests                                  int
+	remoteTestNonce                                 string
+	recoveries                                      map[string]*adminRecovery
+	recoveryWindow, recoveryBlocked                 int64
+	recoveryRequests, recoveryFailures              int
+	ready                                           bool
+	release                                         ReleaseInfo
+	updateChecking, updatePreparing                 bool
+	mu                                              sync.Mutex
+	db                                              DB
+	sessions                                        map[string]Session
+	attempts                                        map[string]Attempt
+	challenges                                      map[string]Challenge
+	counters                                        map[string]uint64
+	resolvedWhite, resolvedBlack                    map[string]int64
+	bootToken                                       string
+	bootExpiry                                      int64
+	fw                                              *Firewall
+	started                                         time.Time
+	rates                                           []RatePoint
+	lastSample                                      time.Time
+	ctx                                             context.Context
+	cancel                                          context.CancelFunc
+	httpClient                                      *http.Client
+	dnsSlots                                        chan struct{}
+	countersDay                                     string
+	blockedPackets, blackPackets                    uint64
+	blockCounters                                   map[string]uint64
 }
 type RatePoint struct {
 	Time     int64
@@ -837,6 +842,11 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		if old.Enabled && contains(v.Methods, "thirdparty") {
 			v.Verified = old.Verified
 		}
+		listener, listenErr := g.prepareRemoteApproval(v.RemoteApproval)
+		if listenErr != nil {
+			e = fmt.Errorf("远程审批监听失败: %w", listenErr)
+			break
+		}
 		g.db.Config = v
 		g.resolvedWhite = map[string]int64{}
 		g.resolvedBlack = map[string]int64{}
@@ -844,7 +854,21 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			g.db.Config = old
 			g.reconcile()
+			if listener != nil {
+				listener.Close()
+			}
+		} else {
+			g.commitRemoteApproval(listener)
+			if old.RemoteApproval != v.RemoteApproval {
+				g.remoteTestNonce = ""
+			}
 		}
+		if e != nil {
+			fail(w, e)
+		} else {
+			reply(w, 200, map[string]bool{"ok": true})
+		}
+		return
 	case "/admin-api/toggle":
 		var v struct{ Enabled bool }
 		if e = body(w, r, &v); e != nil {
@@ -1008,6 +1032,9 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		g.db.Config.AdminHash = passwordHash(v.New)
 		g.sessions = map[string]Session{}
 		g.event("admin", "管理员凭据已更新，所有会话已注销")
+	case "/admin-api/remote-approval-test":
+		g.sendRemoteApprovalTest(w)
+		return
 	case "/admin-api/push-test":
 		p := g.db.Config.Push
 		a := Request{ID: "test", MAC: "02:00:00:00:00:01", Name: "推送测试", Reason: "这是一条测试消息，审批按钮无效。", Created: time.Now().Unix(), Expires: time.Now().Add(5 * time.Minute).Unix()}
@@ -1038,6 +1065,9 @@ func validateQuota(q Quota) error {
 	return nil
 }
 func validateConfig(c Config) error {
+	if err := validateRemoteApproval(c.RemoteApproval); err != nil {
+		return err
+	}
 	for _, mac := range adminDeviceMACs(c) {
 		if !validMAC(mac) {
 			return errors.New("管理员设备 MAC 地址无效")
@@ -1194,11 +1224,20 @@ func (g *Gate) parseApproval(token string) (string, string, error) {
 func (g *Gate) approvalPage(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.approvalPageLocked(w, r)
+}
+func (g *Gate) approvalPageLocked(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	token := r.URL.Query().Get("token")
 	if r.Method == "POST" {
 		r.Body = http.MaxBytesReader(w, r.Body, 8192)
-		r.ParseForm()
-		token = r.Form.Get("token")
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "请求无效", 400)
+			return
+		}
+		token = r.PostForm.Get("token")
 	}
 	id, action, e := g.parseApproval(token)
 	if e != nil {
@@ -1226,7 +1265,7 @@ func (g *Gate) approvalPage(w http.ResponseWriter, r *http.Request) {
 	if action == "deny" {
 		label = "拒绝上网"
 	}
-	fmt.Fprintf(w, `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><body><main class="auth-shell"><section class="card auth-card"><div class="badge">UFI-GATE · 审批确认</div><h1>%s</h1><p>%s · %s</p><p>%s</p><form method="post"><input type="hidden" name="token" value="%s"><label>处理备注<input name="reason" maxlength="1000"></label><button class="primary">确认%s</button></form><p class="muted">链接在 30 分钟后失效。此操作只能执行一次。</p></section></main></body></html>`, htmlEscape(label), htmlEscape(a.Name), htmlEscape(a.MAC), htmlEscape(a.Reason), htmlEscape(token), htmlEscape(label))
+	fmt.Fprintf(w, `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><body><main class="auth-shell"><section class="card auth-card"><div class="badge">UFI-GATE · 审批确认</div><h1>%s</h1><p>%s · %s</p><p>%s</p><form method="post" action="/approve"><input type="hidden" name="token" value="%s"><label>处理备注<input name="reason" maxlength="1000"></label><button class="primary">确认%s</button></form><p class="muted">链接在 30 分钟后失效。此操作只能执行一次。</p></section></main></body></html>`, htmlEscape(label), htmlEscape(a.Name), htmlEscape(a.MAC), htmlEscape(a.Reason), htmlEscape(token), htmlEscape(label))
 }
 func htmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;", "'", "&#39;").Replace(s)
@@ -1237,6 +1276,9 @@ func (g *Gate) sendRequest(p Push, a Request) error {
 	}
 	g.mu.Lock()
 	base := strings.TrimRight(p.PublicBase, "/")
+	if g.db.Config.RemoteApproval.Enabled {
+		base = strings.TrimRight(g.db.Config.RemoteApproval.PublicURL, "/")
+	}
 	if base == "" {
 		base = "http://" + g.db.Config.Gateway + ":8081"
 	}
@@ -1632,6 +1674,14 @@ func main() {
 		log.Fatal(err)
 	}
 	defer control.Close()
+	g.mu.Lock()
+	remoteListener, remoteErr := g.prepareRemoteApproval(g.db.Config.RemoteApproval)
+	if remoteErr != nil {
+		g.event("error", "远程审批监听失败，请检查端口后重新保存设置: "+remoteErr.Error())
+	} else {
+		g.commitRemoteApproval(remoteListener)
+	}
+	g.mu.Unlock()
 	go pserver.Serve(portal)
 	go aserver.Serve(&adminListener{Listener: admin, gate: g})
 	go g.serveDNS(udp, tcp)
@@ -1667,6 +1717,9 @@ func main() {
 	}
 	g.cancel()
 	g.mu.Lock()
+	if g.remoteServer != nil {
+		_ = g.remoteServer.Close()
+	}
 	g.sample()
 	g.fw.cleanup()
 	g.restoreOffload()
