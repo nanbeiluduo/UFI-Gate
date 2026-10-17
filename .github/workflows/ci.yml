@@ -47,6 +47,7 @@ jobs:
           go build -mod=vendor -buildvcs=false -o ufi-gate-demo .
           node tests/update-ui-test.cjs
           node tests/management-ui-test.cjs
+          node tests/remote-approval-ui-test.cjs
           node tests/recovery-ui-test.cjs
 
       - name: Execute ARM32 and ARM64 tests under QEMU
