@@ -246,6 +246,20 @@ func runInstall(stage, target, id string, repair, resume bool) error {
 	if e := validateStaged(stage, target); e != nil {
 		return e
 	}
+	if networkPending() {
+		return errors.New("存在网络配置修复事务，请先恢复")
+	}
+	if b, err := os.ReadFile(filepath.Join(stage, "bootstrap.json")); err == nil {
+		var c NetworkConfig
+		if json.Unmarshal(b, &c) != nil {
+			return errors.New("安装引导配置无效")
+		}
+		if v := validateNetwork(inspectNetwork(), c.LAN, c.Gateway); v.Status != "valid" {
+			return errors.New(v.Message)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	installed, e := installedVersion()
 	if e != nil {
 		return e

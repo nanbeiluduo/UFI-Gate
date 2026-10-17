@@ -303,11 +303,20 @@ func (g *Gate) peerMAC(r *http.Request) (string, error) {
 	// Only use kernel neighbour bindings on the configured hotspot interface. Ignore all browser-supplied MAC/IP fields.
 	out, e := realRun("ip", "-4", "neigh", "show", "dev", g.db.Config.LAN)
 	if e != nil {
-		return "", e
+		return "", g.peerNetworkError(true)
 	}
 	for _, l := range strings.Split(out, "\n") {
 		f := strings.Fields(l)
 		if len(f) < 5 || f[0] != ip {
+			continue
+		}
+		wrongInterface := false
+		for i := 0; i+1 < len(f); i++ {
+			if f[i] == "dev" && f[i+1] != g.db.Config.LAN {
+				wrongInterface = true
+			}
+		}
+		if wrongInterface {
 			continue
 		}
 		for i := 0; i+1 < len(f); i++ {
@@ -316,7 +325,7 @@ func (g *Gate) peerMAC(r *http.Request) (string, error) {
 			}
 		}
 	}
-	return "", errors.New("无法确认热点设备，请重新连接 WiFi 后重试")
+	return "", g.peerNetworkError(false)
 }
 func (g *Gate) device(mac string) *Device {
 	d := g.db.Devices[mac]
@@ -834,6 +843,13 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if e = validateConfig(v); e != nil {
 			break
+		}
+		if !demo && (old.LAN != v.LAN || old.Gateway != v.Gateway) {
+			validation := validateNetwork(inspectNetwork(), v.LAN, v.Gateway)
+			if validation.Status != "valid" {
+				e = errors.New(validation.Message)
+				break
+			}
 		}
 		if old.Enabled && (old.LAN != v.LAN || old.Gateway != v.Gateway) {
 			e = errors.New("修改热点接口/网关前请先关闭认证")
@@ -1462,6 +1478,10 @@ func (g *Gate) middleware(next http.Handler) http.Handler {
 			http.Error(w, "请求过大", 413)
 			return
 		}
+		if r.Method != "GET" && r.Method != "HEAD" && networkPending() {
+			reply(w, 503, map[string]string{"error": "网络配置维护中，请等待修复完成后重试"})
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -1616,6 +1636,18 @@ func main() {
 		}
 		return
 	}
+	lock, e := os.OpenFile(filepath.Join(dir, "service.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if e != nil {
+		log.Fatal(e)
+	}
+	defer lock.Close()
+	if e = lockFile(lock); e != nil {
+		log.Fatal("服务已运行")
+	}
+	// Read state only after taking the service lock; maintenance may have replaced it.
+	if networkPending() && !*networkWorker {
+		log.Fatal("存在网络配置修复事务，请通过插件启动服务恢复")
+	}
 	g, e := loadGate()
 	if e != nil {
 		log.Fatal(e)
@@ -1628,14 +1660,6 @@ func main() {
 		atomicWrite(filepath.Join(dir, "setup.token"), []byte(g.bootToken))
 		fmt.Println(g.bootToken)
 		return
-	}
-	lock, e := os.OpenFile(filepath.Join(dir, "service.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	if e != nil {
-		log.Fatal(e)
-	}
-	defer lock.Close()
-	if e = lockFile(lock); e != nil {
-		log.Fatal("服务已运行")
 	}
 	if demo {
 		g.db.Config.LAN = "lo"
@@ -1695,6 +1719,12 @@ func main() {
 			g.restoreOffload()
 			g.db.Config.Enabled = false
 			g.event("error", "开机恢复失败: "+e.Error())
+		}
+	}
+	if !demo {
+		v := validateNetwork(inspectNetwork(), g.db.Config.LAN, g.db.Config.Gateway)
+		if v.Status != "valid" {
+			g.event("error", "热点配置诊断："+v.Message+"；"+networkRepairHint)
 		}
 	}
 	g.event("service", "服务启动 "+currentVersion())

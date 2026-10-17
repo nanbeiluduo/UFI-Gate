@@ -19,7 +19,11 @@ func updateCLIFlags() bool {
 	inherited := flag.Bool("inherited-lock", false, "继承更新锁")
 	resume := flag.Bool("resume-update", false, "恢复中断的更新")
 	repair := flag.Bool("repair", false, "允许同版本修复")
+	networkCLI := networkCLIFlags()
 	flag.Parse()
+	if networkCLI() {
+		return true
+	}
 	if *versionFlag {
 		_ = json.NewEncoder(os.Stdout).Encode(VersionInfo{Version: currentVersion(), Arch: buildArch(), Protocol: updateProtocol})
 		return true
@@ -68,6 +72,9 @@ func updateCLIFlags() bool {
 		}
 	}
 	defer lock.Close()
+	if networkPending() {
+		log.Fatal("存在网络配置修复事务，请先恢复")
+	}
 	if !*resume {
 		if _, e = os.Stat(filepath.Join(dir, "update-journal.json")); e == nil {
 			log.Fatal("存在中断的更新，请先执行恢复")

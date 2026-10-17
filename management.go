@@ -170,6 +170,17 @@ func (g *Gate) startControl() (net.Listener, error) {
 		return nil, err
 	}
 	s := &http.Server{ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 25 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/network" {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			if !g.ready || g.ctx.Err() != nil {
+				http.Error(w, "not ready", 503)
+				return
+			}
+			c := g.db.Config
+			reply(w, 200, NetworkConfig{c.LAN, c.Gateway, c.Enabled})
+			return
+		}
 		if r.Method == "GET" && r.URL.Path == "/health" {
 			g.mu.Lock()
 			defer g.mu.Unlock()
@@ -188,6 +199,10 @@ func (g *Gate) startControl() (net.Listener, error) {
 		defer g.mu.Unlock()
 		if g.ctx.Err() != nil {
 			http.Error(w, "服务正在停止", 503)
+			return
+		}
+		if networkPending() {
+			reply(w, 503, map[string]string{"error": "网络配置维护中，请稍后重试"})
 			return
 		}
 		token, err := g.resetAdmin()

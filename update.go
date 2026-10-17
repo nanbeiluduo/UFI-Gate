@@ -260,7 +260,7 @@ func acquireUpdateLock() (*os.File, error) {
 	}
 	if e = lockFile(f); e != nil {
 		f.Close()
-		return nil, errors.New("另一个安装或更新任务正在运行")
+		return nil, errors.New("另一个安装、更新或配置修复任务正在运行")
 	}
 	return f, nil
 }
@@ -287,6 +287,10 @@ func (g *Gate) beginUpdate(target string) error {
 	lock, e := acquireUpdateLock()
 	if e != nil {
 		return e
+	}
+	if networkPending() {
+		lock.Close()
+		return errors.New("存在网络配置修复事务，请先恢复")
 	}
 	g.updatePreparing = true
 	job := UpdateStatus{ID: random(8), Version: target, Phase: "downloading", Message: "正在下载并校验更新包"}

@@ -102,6 +102,10 @@ func (g *Gate) remoteApprovalHandler() http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		if r.Method == "POST" && networkPending() {
+			http.Error(w, "网络配置维护中，请稍后重试", 503)
+			return
+		}
 		// Global budget is deliberate: forwarded IP headers are not trusted.
 		now := time.Now().Unix()
 		if now-g.remoteWindow >= 60 {

@@ -31,12 +31,9 @@ func (g *Gate) networkPreflight() error {
 	if err := g.fw.preflight(g.db.Config.LAN); err != nil {
 		return err
 	}
-	out, err := realRun("ip", "-4", "-o", "addr", "show", "dev", g.db.Config.LAN)
-	if err != nil || !strings.Contains(out, "inet "+g.db.Config.Gateway+"/") {
-		return errors.New("网关地址不属于配置的热点接口，拒绝启用")
-	}
-	if g.db.Config.LAN == "lo" || strings.HasPrefix(g.db.Config.LAN, "rmnet") {
-		return errors.New("请选择热点接口，不能使用回环或蜂窝接口")
+	v := validateNetwork(inspectNetwork(), g.db.Config.LAN, g.db.Config.Gateway)
+	if v.Status != "valid" {
+		return errors.New(v.Message)
 	}
 	return nil
 }

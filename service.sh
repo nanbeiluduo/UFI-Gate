@@ -12,7 +12,13 @@ alive() {
   case "$PID" in ''|*[!0-9]*) return 1;; esac
   kill -0 "$PID" 2>/dev/null || return 1
   [ -r "/proc/$PID/cmdline" ] || return 1
-  tr '\000' ' ' < "/proc/$PID/cmdline" | grep -q '/data/ufi-gate' || return 1
+  CMD=$(tr '\000' ' ' < "/proc/$PID/cmdline")
+  case "$1" in
+    */worker.pid) [ "$(readlink "/proc/$PID/exe")" = "$BIN" ] || return 1
+      case "$CMD" in "$BIN --dir $DIR "|"$BIN --dir $DIR --network-worker ") ;; *) return 1;; esac;;
+    */supervisor.pid) case "$CMD" in *"sh $DIR/service.sh supervise "|*"sh $DIR/service.sh supervise-network ") ;; *) return 1;; esac;;
+    *) return 1;;
+  esac
 }
 hook() {
   [ -f "$BOOT" ] || printf '#!/system/bin/sh\n' > "$BOOT"
@@ -29,13 +35,26 @@ stop_worker() {
   if alive "$DIR/worker.pid"; then
     kill "$PID" 2>/dev/null
     I=0
-    while kill -0 "$PID" 2>/dev/null && [ "$I" -lt 8 ]; do sleep 1; I=$((I+1)); done
-    kill -9 "$PID" 2>/dev/null
+    LIMIT=8
+    [ -f "$DIR/network-journal.json" ] && LIMIT=25
+    while kill -0 "$PID" 2>/dev/null && [ "$I" -lt "$LIMIT" ]; do sleep 1; I=$((I+1)); done
+    if alive "$DIR/worker.pid"; then
+      # Never discard the final sample by force-killing a worker during network repair.
+      if [ -f "$DIR/network-journal.json" ]; then echo "worker did not stop; configuration unchanged"; return 1; fi
+      kill -9 "$PID" 2>/dev/null
+    fi
   fi
   rm -f "$DIR/worker.pid"
 }
+if [ -f "$DIR/network-journal.json" ]; then
+  case "$1" in stop|recover|uninstall) echo "配置修复尚未完成，请先启动服务恢复"; exit 1;; esac
+fi
 case "$1" in
- start|start-update)
+ start|start-update|start-network)
+  if [ -f "$DIR/network-journal.json" ] && [ "$1" != start-network ]; then
+    "$BIN" --dir "$DIR" --resume-network >> "$DIR/network-repair.log" 2>&1
+    exit $?
+  fi
   if [ "$1" = start ] && [ -f "$DIR/update-journal.json" ]; then
     "$DIR/update-runner" --dir "$DIR" --resume-update >> "$DIR/update.log" 2>&1
     exit $?
@@ -43,12 +62,18 @@ case "$1" in
   rm -f "$DIR/stopped" "$DIR/suspended"
   if alive "$DIR/supervisor.pid"; then echo 'ok'; exit 0; fi
   rm -rf "$DIR/supervisor.lock"
-  nohup sh "$0" supervise > "$DIR/supervisor.log" 2>&1 </dev/null &
+  MODE=supervise
+  [ "$1" = start-network ] && MODE=supervise-network
+  nohup sh "$0" "$MODE" > "$DIR/supervisor.log" 2>&1 </dev/null &
   echo $! > "$DIR/supervisor.pid"
   hook || { echo '开机脚本写入失败'; exit 1; }
   echo 'ok'
   ;;
  boot)
+  if [ -f "$DIR/network-journal.json" ]; then
+    "$BIN" --dir "$DIR" --resume-network >> "$DIR/network-repair.log" 2>&1
+    exit $?
+  fi
   if [ -f "$DIR/update-journal.json" ]; then
     "$DIR/update-runner" --dir "$DIR" --resume-update >> "$DIR/update.log" 2>&1
     exit $?
@@ -59,14 +84,17 @@ case "$1" in
   sleep 20
   sh "$0" start
   ;;
- supervise)
+ supervise|supervise-network)
+  NETWORK_WORKER=
+  [ "$1" = supervise-network ] && NETWORK_WORKER=--network-worker
   mkdir "$DIR/supervisor.lock" 2>/dev/null || exit 0
   echo $$ > "$DIR/supervisor.pid"
   trap 'stop_worker; rmdir "$DIR/supervisor.lock" 2>/dev/null; exit 0' INT TERM
   FAIL=0
   while [ ! -f "$DIR/stopped" ] && [ ! -f "$DIR/suspended" ]; do
     "$BIN" --dir "$DIR" --cleanup-rules >> "$DIR/supervisor.log" 2>&1
-    "$BIN" --dir "$DIR" >> "$DIR/service.log" 2>&1 &
+    if [ -f "$DIR/network-journal.json" ] && [ -z "$NETWORK_WORKER" ]; then break; fi
+    "$BIN" --dir "$DIR" $NETWORK_WORKER >> "$DIR/service.log" 2>&1 &
     WORKER=$!
     echo "$WORKER" > "$DIR/worker.pid"
     wait "$WORKER"
@@ -85,18 +113,20 @@ case "$1" in
   done
   rmdir "$DIR/supervisor.lock" 2>/dev/null
   ;;
- stop|recover|stop-update)
+ stop|recover|stop-update|stop-network)
   touch "$DIR/stopped"
   if alive "$DIR/supervisor.pid"; then kill "$PID" 2>/dev/null; fi
-  stop_worker
+  stop_worker || exit 1
   # Do not recover/load state until the old worker has actually released its lock.
   I=0
   while alive "$DIR/supervisor.pid" && [ "$I" -lt 10 ]; do sleep 1; I=$((I+1)); done
   if alive "$DIR/supervisor.pid"; then echo 'supervisor did not stop'; exit 1; fi
-  if ! "$BIN" --dir "$DIR" --recover; then
+  if [ "$1" = stop-network ]; then
+    "$BIN" --dir "$DIR" --network-offline || exit 1
+  elif ! "$BIN" --dir "$DIR" --recover; then
     [ "$1" = stop-update ] && "$DIR/update-backup/ufi-gate" --dir "$DIR" --cleanup-rules || exit 1
   fi
-  if [ "$1" = stop-update ]; then hook || exit 1; else unhook || exit 1; fi
+  if [ "$1" = stop-update ] || [ "$1" = stop-network ]; then hook || exit 1; else unhook || exit 1; fi
   rm -f "$DIR/supervisor.pid"
   rm -rf "$DIR/supervisor.lock"
   echo 'ok'
