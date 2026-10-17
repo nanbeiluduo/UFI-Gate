@@ -24,9 +24,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  await page.locator('#verified').uncheck();await page.locator('#lan').fill('unsaved-interface');await page.locator('[data-action=toggle]').click();
  assert.equal(await enabled(),false);assert.equal(await saved(),true);assert.equal(await page.locator('#verified').isChecked(),false);assert.equal(await page.locator('#lan').inputValue(),'unsaved-interface');
  await page.locator('#lan').fill('lo');await page.locator('#verified').check();
- page.once('dialog',d=>d.accept());await page.locator('[data-action=toggle]').click();await page.locator('[data-action=toggle]').filter({hasText:'关闭认证'}).waitFor();assert.equal(await enabled(),true);
+ await page.locator('[data-action=toggle]').click();await page.locator("#confirm-accept").click();await page.locator('[data-action=toggle]').filter({hasText:'关闭认证'}).waitFor();assert.equal(await enabled(),true);
  // Unchecked confirmation never blocks shutting authentication off.
- await page.locator('#verified').uncheck();page.once('dialog',d=>d.accept());await page.locator('[data-action=toggle]').click();await page.locator('[data-action=toggle]').filter({hasText:'开启认证'}).waitFor();assert.equal(await enabled(),false);assert.equal(await page.locator('#verified').isChecked(),false);
+ await page.locator('#verified').uncheck();await page.locator('[data-action=toggle]').click();await page.locator("#confirm-accept").click();await page.locator('[data-action=toggle]').filter({hasText:'开启认证'}).waitFor();assert.equal(await enabled(),false);assert.equal(await page.locator('#verified').isChecked(),false);
  await page.locator('[data-nav=dashboard]').click();await page.locator('[data-action=toggle]').click();await page.locator('#verified').waitFor();assert.equal(await page.locator('#verified').isChecked(),false);
  // New/unconfirmed saved config requires explicit check AND saving the changed configuration.
  await page.locator('[data-action=save-settings]').click();await page.locator('#toast').filter({hasText:'设置已保存'}).waitFor();assert.equal(await saved(),false);

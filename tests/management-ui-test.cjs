@@ -25,9 +25,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  await page.evaluate(async()=>{await fetch('/admin-api/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({MAC:'02:00:00:00:00:33',Action:'block'})})});
  await page.locator('[data-action=refresh]').click();
  const card=page.locator('.device').filter({hasText:'02:00:00:00:00:33'});
- page.once('dialog',d=>d.accept());await card.locator('[data-action=device-admin-add]').click();await card.getByText('管理员设备',{exact:false}).first().waitFor();
+ await card.locator('[data-action=device-admin-add]').click();await page.locator("#confirm-accept").click();await card.getByText('管理员设备',{exact:false}).first().waitFor();
  assert(await card.getByText('已封禁',{exact:true}).isVisible());
- page.once('dialog',d=>d.accept());await card.locator('[data-action=device-admin-remove]').click();await card.locator('[data-action=device-admin-add]').waitFor();
+ await card.locator('[data-action=device-admin-remove]').click();await page.locator("#confirm-accept").click();await card.locator('[data-action=device-admin-add]').waitFor();
  for(const width of [390,834,1440]){await page.setViewportSize({width,height:950});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'device page overflow '+width)}
  // Load the actual plugin UI with a mocked host Root bridge.
  const commands=[];

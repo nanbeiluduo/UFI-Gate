@@ -39,7 +39,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.2.1"
+const version = "1.2.2"
 
 var dir string
 var demo bool
@@ -1569,6 +1569,8 @@ func (g *Gate) adminHandler() http.Handler {
 			staticFile(w, r, "recovery.js")
 		} else if r.URL.Path == "/admin.js" {
 			staticFile(w, r, "admin.js")
+		} else if r.URL.Path == "/admin-ui.js" {
+			staticFile(w, r, "admin-ui.js")
 		} else if r.URL.Path == "/admin-updates.js" {
 			staticFile(w, r, "admin-updates.js")
 		} else if r.URL.Path == "/marked.min.js" {

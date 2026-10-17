@@ -1,19 +1,20 @@
 'use strict';
 window.createUpdateUI = ({api, esc, stamp, toast, navigate}) => {
+  let performing=false;
   let messages={items:[],kinds:{},push:{}}, update, filter='all';
   const $=id=>document.getElementById(id);
   const pushStates={off:'仅站内',pending:'等待推送',sent:'已推送',failed:'推送失败',expired:'申请已结束'};
   const phases={downloading:'下载中',verified:'校验通过',preparing:'备份中',stopping:'停服中',installing:'安装中',starting:'健康检查中',rolling_back:'恢复旧版本',success:'更新成功',failed:'更新失败',rolled_back:'已恢复旧版本',rollback_failed:'需要手动恢复'};
   const newer=(a,b)=>{if(!/^\d+\.\d+\.\d+$/.test(a||''))return false;const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i];return false};
-  async function perform(fn){try{await fn()}catch(e){toast(e.message)}}
+  async function perform(fn){if(performing)return;performing=true;try{await fn()}catch(e){toast(e.message)}finally{performing=false}}
   function mount(){
     $('root').insertAdjacentHTML('beforeend','<button id="message-float" class="message-float" aria-label="打开消息盒子">消息 <span id="message-count">0</span></button><dialog id="message-box" class="message-box"><div class="row between"><h2>消息盒子</h2><button id="message-close">关闭</button></div><div class="row"><select id="message-filter" aria-label="通知筛选"><option value="all">全部消息</option><option value="unread">未读消息</option><option value="updates">版本与更新</option><option value="alerts">设备与异常</option></select><button id="message-read-all">全部已读</button><button id="message-delete-read">删除已读</button><button id="message-clear">清空全部</button></div><div id="message-list"></div></dialog>');
     $('message-float').onclick=()=>perform(async()=>{await refresh();renderMessages();$('message-box').showModal()});
     $('message-close').onclick=()=>$('message-box').close();
     $('message-filter').onchange=e=>{filter=e.target.value;renderMessages()};
     $('message-read-all').onclick=()=>perform(async()=>{await api('notifications/read',{All:true});await refresh()});
-    $('message-delete-read').onclick=()=>perform(async()=>{await api('notifications/delete',{Read:true});toast('已删除已读消息');await refresh()});
-    $('message-clear').onclick=()=>perform(async()=>{if(!confirm('确认清空所有消息？此操作不可恢复。'))return;await api('notifications/delete',{All:true});toast('已清空所有消息');await refresh()});
+    $('message-delete-read').onclick=()=>perform(async()=>{if(!await window.ufiAdminUI.confirm('删除所有已读消息？此操作不可恢复。','确认删除'))return;await api('notifications/delete',{Read:true});toast('已删除已读消息');await refresh()});
+    $('message-clear').onclick=()=>perform(async()=>{if(!await window.ufiAdminUI.confirm('确认清空所有消息？此操作不可恢复。','确认清空'))return;await api('notifications/delete',{All:true});toast('已清空所有消息');await refresh()});
   }
   function renderMessages(){
     if(!$('message-list'))return;
@@ -47,7 +48,7 @@ window.createUpdateUI = ({api, esc, stamp, toast, navigate}) => {
     renderUpdateStatus();
     $('update-check').onclick=()=>perform(async()=>{ $('update-check').disabled=true;await api('update/check',{});await refresh()});
     $('update-save').onclick=()=>perform(async()=>{await api('update/settings',{AutoCheck:$('update-auto').checked});toast('检查设置已保存')});
-    $('update-install').onclick=()=>perform(async()=>{const version=update.release.version;if(!confirm('确认从 '+update.current+' 更新到 '+version+'？\n将短暂停服、保留数据并关闭认证。失败会尝试恢复旧服务。'))return;$('update-install').disabled=true;await api('update/install',{Version:version});toast('更新任务已提交，服务重启后请重新登录');await refresh()});
+    $('update-install').onclick=()=>perform(async()=>{const version=update.release.version;if(!await window.ufiAdminUI.confirm('确认从 '+update.current+' 更新到 '+version+'？\n将短暂停服、保留数据并关闭认证。失败会尝试恢复旧服务。','确认更新'))return;$('update-install').disabled=true;await api('update/install',{Version:version});toast('更新任务已提交，服务重启后请重新登录');await refresh()});
   }
   async function renderPreferences(){
     const m=await api('notifications');if(!$('view')||!document.querySelector('[data-action="push-test"]'))return;
