@@ -11,13 +11,20 @@ let logs='';daemon.stderr.on('data',b=>logs+=b);const sleep=ms=>new Promise(r=>s
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||undefined});
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8081/#'+fs.readFileSync(path.join(state,'setup.token'),'utf8'));
+ await page.locator('#loginbtn').waitFor();
+ assert.equal(await page.locator('#admin-forgot-password').count(),0,'setup must use the initialization credential');
  await page.locator('#user').fill('admin');await page.locator('#pass').fill('AdminPass123');await page.locator('#loginbtn').click();
  const oldKey=await saveRecovery(page);await page.locator('#view').waitFor();
  await page.goto('http://127.0.0.1:8090/');await page.locator('#admin-login').click();
  for(const width of [390,834,1440]) {await page.setViewportSize({width,height:950});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'recovery page overflow '+width)}
  await page.locator('#admin-user').fill('admin');await page.locator('#admin-password').fill('wrong');await page.locator('#admin-access-submit').click();await page.locator('#admin-access-error').filter({hasText:'无效'}).waitFor();
  await page.locator('#admin-password').fill('AdminPass123');await page.locator('#admin-access-submit').click();await page.locator('#view').waitFor();
- await page.goto('http://127.0.0.1:8090/admin-access');await page.locator('#forgot-password').check();
+ await page.locator('#logout').click();await page.locator('#admin-forgot-password').waitFor();
+ assert.equal(await page.locator('#admin-forgot-password').getAttribute('href'),'http://127.0.0.1:8090/admin-access?mode=recovery');
+ await page.locator('#admin-forgot-password').click();
+ await page.locator('#admin-recovery-key').waitFor({state:'visible'});
+ assert(await page.locator('#forgot-password').isChecked(),'backend forgot-password link must select recovery mode');
+ assert(await page.locator('#admin-user').isDisabled());
  await page.locator('#admin-recovery-key').fill(oldKey);await page.locator('#admin-new-password').fill('NewAdmin123');await page.locator('#admin-confirm-password').fill('Different123');await page.locator('#admin-access-submit').click();await page.getByText('两次新密码不一致').waitFor();
  await page.locator('#admin-confirm-password').fill('NewAdmin123');await page.locator('#admin-access-submit').click();await page.locator('#recovery-download').waitFor();
  for(const width of [390,834,1440]) {await page.setViewportSize({width,height:950});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'download page overflow '+width)}

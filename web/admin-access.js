@@ -8,6 +8,10 @@
     $('admin-access-submit').textContent = forgot.checked ? '验证密钥并生成新密钥' : '登录并添加此管理设备';
     $('admin-access-error').textContent = '';
   };
+  if (new URLSearchParams(location.search).get('mode') === 'recovery') {
+    forgot.checked = true;
+    forgot.onchange();
+  }
   $('admin-access-form').onsubmit = async event => {
     event.preventDefault(); const button=$('admin-access-submit'); button.disabled=true;
     try {
