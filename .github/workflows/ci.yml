@@ -25,6 +25,8 @@ jobs:
         run: |
           go vet -mod=vendor ./...
           node --check web/admin.js
+          node --check web/admin-ui.js
+          node --check tests/admin-layout-ui-test.cjs
           node --check web/admin-updates.js
           node --check web/admin-access.js
           node --check web/recovery.js
@@ -45,6 +47,7 @@ jobs:
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps chromium
           go build -mod=vendor -buildvcs=false -o ufi-gate-demo .
+          node tests/admin-layout-ui-test.cjs
           node tests/update-ui-test.cjs
           node tests/management-ui-test.cjs
           node tests/remote-approval-ui-test.cjs
