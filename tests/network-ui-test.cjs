@@ -12,9 +12,28 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8081/#'+fs.readFileSync(path.join(state,'setup.token'),'utf8'));
  await page.locator('#user').fill('admin');await page.locator('#pass').fill('AdminPass123');await page.locator('#loginbtn').click();await saveRecovery(page);await page.locator('#view').waitFor();
- await page.locator('[data-nav=system]').click();await page.locator('#verified').uncheck();await page.locator('[data-action=save-settings]').click();await page.locator('#toast').filter({hasText:'设置已保存'}).waitFor();
- await page.locator('[data-nav=dashboard]').click();await page.locator('[data-action=toggle]').click();await page.locator('#verified').waitFor();assert.equal(await page.locator('#verified').isChecked(),false);assert.equal(await page.locator('#verified').evaluate(e=>document.activeElement===e),true);assert.equal(await page.evaluate(async()=> (await(await fetch('/admin-api/dashboard')).json()).enabled),false);
+ const enabled=()=>page.evaluate(async()=>(await(await fetch('/admin-api/dashboard')).json()).enabled);
+ const saved=()=>page.evaluate(async()=>(await(await fetch('/admin-api/config')).json()).config.Verified);
+ // Existing accounts may already have Verified=true. That historical value must not skip this activation's checkbox.
+ assert.equal(await saved(),true);
+ await page.locator('[data-action=toggle]').click();await page.locator('#verified').waitFor();
+ assert.equal(await page.locator('#verified').isChecked(),false);assert.equal(await page.locator('#verified').evaluate(e=>document.activeElement===e),true);assert.equal(await enabled(),false);
  assert(await page.locator('#verified').evaluate(e=>e.closest('label').getAnimations().length)>0);
+ await page.locator('#verified').check();await page.locator('[data-action=save-settings]').click();await page.locator('#toast').filter({hasText:'设置已保存'}).waitFor();
+ // Reproduce 1.2.0: uncheck without saving while persisted Verified remains true. Do not rerender away this draft.
+ await page.locator('#verified').uncheck();await page.locator('#lan').fill('unsaved-interface');await page.locator('[data-action=toggle]').click();
+ assert.equal(await enabled(),false);assert.equal(await saved(),true);assert.equal(await page.locator('#verified').isChecked(),false);assert.equal(await page.locator('#lan').inputValue(),'unsaved-interface');
+ await page.locator('#lan').fill('lo');await page.locator('#verified').check();
+ page.once('dialog',d=>d.accept());await page.locator('[data-action=toggle]').click();await page.locator('[data-action=toggle]').filter({hasText:'关闭认证'}).waitFor();assert.equal(await enabled(),true);
+ // Unchecked confirmation never blocks shutting authentication off.
+ await page.locator('#verified').uncheck();page.once('dialog',d=>d.accept());await page.locator('[data-action=toggle]').click();await page.locator('[data-action=toggle]').filter({hasText:'开启认证'}).waitFor();assert.equal(await enabled(),false);assert.equal(await page.locator('#verified').isChecked(),false);
+ await page.locator('[data-nav=dashboard]').click();await page.locator('[data-action=toggle]').click();await page.locator('#verified').waitFor();assert.equal(await page.locator('#verified').isChecked(),false);
+ // New/unconfirmed saved config requires explicit check AND saving the changed configuration.
+ await page.locator('[data-action=save-settings]').click();await page.locator('#toast').filter({hasText:'设置已保存'}).waitFor();assert.equal(await saved(),false);
+ await page.locator('#verified').check();await page.locator('[data-action=toggle]').click();assert.equal(await enabled(),false);assert.equal(await page.locator('#verified').isChecked(),true);
+ await page.locator('[data-action=save-settings]').click();await page.locator('#toast').filter({hasText:'设置已保存'}).waitFor();
+ // Reloading starts a new confirmation flow even when the stored flag is true.
+ await page.reload();await page.locator('#view').waitFor();await page.locator('[data-action=toggle]').click();await page.locator('#verified').waitFor();assert.equal(await page.locator('#verified').isChecked(),false);assert.equal(await enabled(),false);
  // This guided jump never auto-checks or auto-saves the user's confirmation.
  await page.evaluate(()=>{window.commands=[];window.badDetector=false;window.invalidDetector=false;window.runShellWithRoot=async cmd=>{commands.push(cmd);let content='';if(cmd==='id -u')content='0';else if(cmd==='uname -m')content='aarch64';else if(cmd.includes('[ -x '))content='YES';else if(cmd.includes('--network-inspect')){if(window.badDetector)return {success:false,content:'flag provided but not defined'};content=JSON.stringify({Protocol:1,Running:{LAN:'wlan0',Gateway:'192.168.0.1',Enabled:false},Saved:{LAN:'wlan0',Gateway:'192.168.0.1',Enabled:false},Bootstrap:{LAN:'br0',Gateway:'192.168.0.1'},Recommended:{LAN:'br0',Gateway:'192.168.0.1',Reason:'本机管理地址已核对'},Candidates:[{LAN:'br0',Gateway:'192.168.0.1',Reason:'本机地址'}],Interfaces:[{Name:'br0',Up:true,Addresses:['192.168.0.1/24']}],Warnings:['保存配置与安装引导不一致'],SavedValidation:{Status:'invalid',Message:'192.168.0.1 当前配置在 br0，而不是 wlan0。请检查热点接口。'},Validation:window.invalidDetector?{Status:'invalid',Message:'网关不匹配'}:{Status:'valid',Message:'接口匹配'}})}return {success:true,content}}});
  const plugin=fs.readFileSync(path.join(root,'plugin.template.js'),'utf8').replace('@@SERVICE@@','""').replace('@@RECOVER@@','""').replaceAll('@@ARCH@@','arm64');await page.addScriptTag({content:plugin});await page.locator('#ug-entry').click();

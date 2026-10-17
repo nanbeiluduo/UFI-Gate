@@ -17,7 +17,7 @@ const assert=(v,msg)=>{if(!v)throw Error(msg)};
  async function api(p,v){const res=await context.request.post('http://127.0.0.1:8081/admin-api/'+p,{data:v,headers:{Origin:'http://127.0.0.1:8081'}});assert(res.ok(),p+': '+await res.text());return res.json()}
  await api('account',{Name:'guest',Password:'GuestPass123',Action:'create'});
  await api('device',{MAC:'02:00:00:00:00:22',Action:'trust'});await api('device',{MAC:'02:00:00:00:00:33',Action:'block'});
- await api('toggle',{Enabled:true});
+ await api('toggle',{Enabled:true,Confirmed:true});
  fs.mkdirSync(path.join(root,'tests','screenshots'),{recursive:true});let checked=0;
  for(const width of [390,834,1440]){await page.setViewportSize({width,height:1000});for(const panel of ['dashboard','devices','approvals','accounts','auth','policy','appearance','push','system','logs']){if(width<768)await page.locator('#menu').click();await page.locator('[data-nav='+panel+']').click();await sleep(150);const dimensions=await page.evaluate(()=>({vw:innerWidth,sw:document.documentElement.scrollWidth}));assert(dimensions.sw<=dimensions.vw+1,`overflow ${panel} @ ${width}: ${dimensions.sw}`);checked++}if(width<768)await page.locator('#menu').click();await page.locator('[data-nav=dashboard]').click();await sleep(250);await page.screenshot({path:path.join(root,'tests','screenshots','admin-'+width+'.png'),fullPage:true})}
  await api('device',{MAC:'02:00:00:00:00:02',Action:'revoke'});

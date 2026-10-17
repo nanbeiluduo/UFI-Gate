@@ -39,7 +39,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.2.0"
+const version = "1.2.1"
 
 var dir string
 var demo bool
@@ -855,9 +855,6 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 			e = errors.New("修改热点接口/网关前请先关闭认证")
 			break
 		}
-		if old.Enabled && contains(v.Methods, "thirdparty") {
-			v.Verified = old.Verified
-		}
 		listener, listenErr := g.prepareRemoteApproval(v.RemoteApproval)
 		if listenErr != nil {
 			e = fmt.Errorf("远程审批监听失败: %w", listenErr)
@@ -886,7 +883,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	case "/admin-api/toggle":
-		var v struct{ Enabled bool }
+		var v struct{ Enabled, Confirmed bool }
 		if e = body(w, r, &v); e != nil {
 			break
 		}
@@ -894,9 +891,9 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 			if e = validateConfig(g.db.Config); e != nil {
 				break
 			}
-			if !g.db.Config.Verified {
-				e = errors.New("请先核对热点接口、处理固件专有硬件加速，并准备好 Root 紧急恢复通道")
-				break
+			if !g.db.Config.Verified || !v.Confirmed {
+				reply(w, 400, map[string]string{"code": "confirmation_required", "error": "请在服务设置中核对接口、加速设置和 Root 恢复通道，勾选确认并保存后再开启认证"})
+				return
 			}
 			if e = g.networkPreflight(); e != nil {
 				break
