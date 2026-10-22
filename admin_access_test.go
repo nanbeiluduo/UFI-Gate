@@ -22,7 +22,7 @@ func TestAdminConnectionAccess(t *testing.T) {
 		g.mu.Lock()
 		g.db.Config.Enabled = enabled
 		g.mu.Unlock()
-		for _, path := range []string{"/", "/admin.js", "/admin-ui.js", "/style.css", "/site-logo", "/default-logo.png", "/admin-api/ready", "/approve"} {
+		for _, path := range []string{"/", "/admin.js", "/admin-ui.js", "/portal-designer.js", "/portal-theme.js", "/admin-api/portal-theme", "/style.css", "/site-logo", "/default-logo.png", "/admin-api/ready", "/approve"} {
 			resp, err := client.Get(server.URL + path)
 			if resp != nil {
 				resp.Body.Close()

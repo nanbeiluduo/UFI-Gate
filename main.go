@@ -39,7 +39,7 @@ import (
 //go:embed web/*
 var web embed.FS
 
-const version = "1.2.2"
+const version = "1.2.3"
 
 var dir string
 var demo bool
@@ -746,7 +746,7 @@ func (g *Gate) adminAPI(w http.ResponseWriter, r *http.Request) {
 		g.prepareRecovery(w, r, "enroll", g.db.Config.AdminName, g.db.Config.AdminHash)
 		return
 	}
-	if g.updateAPI(w, r) || g.notificationsAPI(w, r) {
+	if g.themeAPI(w, r) || g.updateAPI(w, r) || g.notificationsAPI(w, r) {
 		return
 	}
 	if r.Method == "GET" {
@@ -1502,6 +1502,7 @@ func (g *Gate) portalHandler() http.Handler {
 	m.HandleFunc("/site-logo", g.siteLogo)
 	m.HandleFunc("/default-logo.png", defaultLogo)
 	m.HandleFunc("/api/admin-access/", g.portalAdminAPI)
+	m.HandleFunc("/api/portal-theme", g.publicTheme)
 	m.HandleFunc("/api/", g.portalAPI)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1513,6 +1514,8 @@ func (g *Gate) portalHandler() http.Handler {
 			staticFile(w, r, "admin-access.js")
 		case "/recovery.js":
 			staticFile(w, r, "recovery.js")
+		case "/portal-theme.js", "/portal-theme.css":
+			staticFile(w, r, r.URL.Path[1:])
 		case "/portal.js":
 			staticFile(w, r, "portal.js")
 		case "/":
@@ -1563,7 +1566,9 @@ func (g *Gate) adminHandler() http.Handler {
 	m.HandleFunc("/admin-api/", g.adminAPI)
 	m.HandleFunc("/approve", g.approvalPage)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/style.css" {
+		if r.URL.Path == "/portal-designer.js" || r.URL.Path == "/portal-theme.js" || r.URL.Path == "/portal-theme.css" {
+			staticFile(w, r, r.URL.Path[1:])
+		} else if r.URL.Path == "/style.css" {
 			staticFile(w, r, "style.css")
 		} else if r.URL.Path == "/recovery.js" {
 			staticFile(w, r, "recovery.js")

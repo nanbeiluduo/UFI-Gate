@@ -1,0 +1,14 @@
+/* Shared, DOM-only renderer. No imported HTML, CSS or scripts are executed. */
+(()=>{'use strict';
+const pages={login:'认证首页',waiting:'等待审批',success:'认证成功',restricted:'访问受限'};
+function fresh(kind='simple'){const t={schema:1,accent:kind==='brand'?'#075985':'#2563eb',background:kind==='notice'?'#fff7ed':'#f1f5f9',radius:16,pages:{},shared:[]};for(const k of Object.keys(pages))t.pages[k]={before:[],after:[]};if(kind!=='simple')t.pages.login.before.push({type:kind==='notice'?'notice':'text',text:kind==='notice'?'欢迎使用共享网络，请遵守网络使用约定。':'欢迎来到我们的网络',align:'center'});return t}
+function render(items,root){root.replaceChildren();for(const b of items||[]){let el=document.createElement('div');el.className='pt-block pt-'+b.type;if(b.size>=14&&b.size<=40)el.style.fontSize=b.size+'px';if(/^#[0-9a-fA-F]{6}$/.test(b.color||''))el.style.color=b.color;el.style.textAlign=['left','center','right'].includes(b.align)?b.align:'left';if(b.type==='image'){if(/^data:image\/(png|jpeg|gif);base64,/.test(b.image||'')){const im=new Image();im.src=b.image;im.alt=b.text||'';el.append(im)}}else if(b.type==='button'){const a=document.createElement('a');try{const u=new URL(b.url);if(['http:','https:'].includes(u.protocol)){a.href=u.href;a.rel='noopener noreferrer';a.target='_blank'}}catch{}a.textContent=b.text||'了解更多';a.className='button';el.append(a)}else if(b.type==='container'){render(b.children,el)}else if(!['divider','space'].includes(b.type)){el.textContent=b.text||''}root.append(el)}}
+function style(root,t){root.style.setProperty('--pt-accent',t.accent);const rgb=[1,3,5].map(i=>parseInt(t.accent.slice(i,i+2),16)/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);root.style.setProperty('--pt-ink',rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722>0.179?'#000000':'#ffffff');root.style.setProperty('--pt-background',t.background);root.style.setProperty('--pt-radius',t.radius+'px')}
+window.UFITheme={pages,fresh,render,style};
+if(!document.getElementById('card'))return;
+let theme=null,last='';const card=document.getElementById('card');
+const before=document.createElement('div'),after=document.createElement('div'),shared=document.createElement('div');card.before(before);card.after(after,shared);for(const el of [before,after,shared]){el.className='pt-region';el.hidden=true;}
+function apply(state){if(!theme)return;style(document.body,theme);document.body.classList.add('pt-active');if(last===state)return;last=state;const p=theme.pages[state]||theme.pages.login;render(p.before,before);render(p.after,after);render(theme.shared,shared);for(const el of [before,after,shared])el.hidden=el.children.length===0}
+window.addEventListener('ufi-portal-state',e=>{document.body.dataset.portalState=e.detail;apply(e.detail)});
+fetch('/api/portal-theme').then(r=>r.ok?r.json():null).then(t=>{if(t&&t.schema===1&&t.pages){theme=t;apply(document.body.dataset.portalState||'login')}}).catch(()=>{});
+})();
