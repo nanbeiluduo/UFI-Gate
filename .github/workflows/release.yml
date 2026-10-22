@@ -79,6 +79,9 @@ jobs:
         run: |
           go test -mod=vendor -race ./...
           go vet -mod=vendor ./...
+          node --check web/portal-theme.js
+          node --check web/portal-designer.js
+          node --check tests/portal-theme-ui-test.cjs
           node --check web/admin.js
           node --check web/admin-ui.js
           node --check tests/admin-layout-ui-test.cjs
@@ -105,6 +108,7 @@ jobs:
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps chromium
           go build -mod=vendor -buildvcs=false -o ufi-gate-demo .
+          node tests/portal-theme-ui-test.cjs
           node tests/admin-layout-ui-test.cjs
           node tests/update-ui-test.cjs
           node tests/management-ui-test.cjs
