@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFI-Gate · 随身 WiFi 网页认证</title>
+<meta name="description" content="为 UFI-TOOLS 随身 WiFi 提供网页认证、设备准入、流量配额和审批推送。独立管理后台，Fluent / WinUI 3 风格。">
+<link rel="icon" href="assets/logo.png">
+<script>
+try {
+  var theme = localStorage.getItem('ufi-site-theme');
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+} catch (e) {}
+</script>
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="nav">
+  <a class="brand" href="./">
+    <img src="assets/logo.png" alt="" width="32" height="32">
+    <span>UFI-Gate</span>
+  </a>
+  <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-panel">菜单</button>
+  <div class="nav-panel" id="nav-panel">
+    <nav class="nav-links" aria-label="页内">
+      <a href="#features">功能</a>
+      <a href="#download">下载</a>
+      <a href="#stats">数据</a>
+      <a href="demo.html">在线体验</a>
+    </nav>
+    <div class="nav-tools">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换主题">
+        <span class="theme-ico" aria-hidden="true"></span>
+      </button>
+      <a class="star-btn" id="star-link" href="https://github.com/nanbeiluduo/UFI-Gate" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+        <span>Star</span>
+        <span class="star-count" id="star-count">…</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="kicker">UFI-TOOLS 随身 WiFi 插件</p>
+      <h1>开放热点，准入由你决定。</h1>
+      <p class="lead">访客先完成认证，再获得上网许可。设备准入、流量配额和审批推送，都在独立的管理后台里完成。界面沿用 Fluent / WinUI 3，手机、平板和电脑都能用。</p>
+      <div class="cta">
+        <a class="btn primary" href="#download">下载最新版</a>
+        <a class="btn secondary" href="demo.html">在浏览器里试用</a>
+      </div>
+      <p class="meta">当前版本 1.2.3 · Rooted ARM32 / ARM64 Android · MIT</p>
+    </div>
+    <div class="hero-stage" aria-hidden="true">
+      <div class="mock-metrics">
+        <div><span>当前活跃设备</span><strong>3</strong></div>
+        <div><span>今日用量</span><strong>216 MiB</strong></div>
+        <div><span>待处理申请</span><strong>1</strong></div>
+      </div>
+      <article class="mock-portal">
+        <img src="assets/logo.png" alt="">
+        <p class="mock-badge">UFI-GATE · NETWORK ACCESS</p>
+        <h2>连接，从这里开始</h2>
+        <p>欢迎使用共享网络。完成认证，即可安心上网。</p>
+        <div class="mock-tabs"><span class="on">账号登录</span><span>图形验证码</span><span>申请上网</span></div>
+        <div class="mock-field"><span>上网账号</span></div>
+        <div class="mock-field"><span>密码</span></div>
+        <div class="mock-btn">验证并连接</div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="section-head">
+      <h2>热点开着，规则在你这边</h2>
+      <p>插件跑在随身 WiFi 上，后台和认证页都由它自己提供，不依赖额外的云服务。</p>
+    </div>
+    <div class="feature-grid">
+      <article>
+        <h3>网页认证</h3>
+        <p>上网账号、本地图形验证码、hCaptcha、Turnstile 或自定义验证接口，也可以改成管理员审批。</p>
+      </article>
+      <article>
+        <h3>设备准入</h3>
+        <p>按 MAC 识别设备。放行、封禁、清除会话、永久信任，管理员设备可以有多台，且与联网授权分开。</p>
+      </article>
+      <article>
+        <h3>流量配额</h3>
+        <p>自然日、历史累计、单次会话和固定周期可以叠加。提前限速，满额后断网或限速，由管理员解除。</p>
+      </article>
+      <article>
+        <h3>审批推送</h3>
+        <p>企业微信、飞书、通用 Webhook 和邮件。外网审批走你自己的 HTTPS 隧道，项目不提供穿透服务器。</p>
+      </article>
+      <article>
+        <h3>独立后台</h3>
+        <p>默认开在 8081。设备看板、实时速率、用量排行和日志都在同一套浅色 / 深色界面里。</p>
+      </article>
+      <article>
+        <h3>门户设计器</h3>
+        <p>分别布置认证首页、等待审批、认证成功和访问受限。认证表单留在固定区域，不能被盖住。</p>
+      </article>
+      <article>
+        <h3>访问策略</h3>
+        <p>域名和 IPv4 黑白名单。白名单可以免认证，黑名单优先。也可以换掉认证页上的 Logo 和文案。</p>
+      </article>
+      <article>
+        <h3>客户端隔离</h3>
+        <p>认证开启后，热点内设备默认不能互访。访问网关后台和外网仍按准入规则放行。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section band">
+    <div class="section-head">
+      <h2>从导入到放行</h2>
+      <p>安装包是单个 .js，里面已经带好静态守护程序。完整步骤在安装指南里。</p>
+    </div>
+    <ol class="steps">
+      <li><span>01</span><h3>选对架构</h3><p>在 Root Shell 运行 <code>uname -m</code>。<code>aarch64</code> 用 ARM64，<code>armv7l</code> 和 <code>armv8l</code> 用 ARM32。</p></li>
+      <li><span>02</span><h3>导入并安装</h3><p>在 UFI-TOOLS 插件管理里导入 .js，检测环境，核对热点接口和网关，再安装服务。</p></li>
+      <li><span>03</span><h3>配置后台</h3><p>打开 <code>http://网关:8081</code>，创建管理员，设置认证方式、配额和推送。默认门户在 8090。</p></li>
+      <li><span>04</span><h3>用第二台设备验收</h3><p>管理设备本身是受信任的。换一台未受信任的设备连上开放热点，走完认证再给访客用。</p></li>
+    </ol>
+  </section>
+
+  <section class="section" id="download">
+    <div class="section-head">
+      <h2>下载安装包</h2>
+      <p>按钮指向最新正式版里的插件文件。读不到接口时，仍然可以打开 Releases。</p>
+    </div>
+    <div class="download-card">
+      <div class="download-meta">
+        <span class="badge">RELEASE</span>
+        <strong id="download-version">最新版本</strong>
+        <span class="muted" id="download-date">正在读取 GitHub Releases…</span>
+      </div>
+      <div class="download-actions" id="download-actions"></div>
+      <p id="download-fallback"><a class="btn primary" href="https://github.com/nanbeiluduo/UFI-Gate/releases">前往 Releases 下载</a></p>
+      <div class="arch-table" role="table" aria-label="架构选择">
+        <div role="row"><span role="cell"><code>aarch64</code> / <code>arm64</code></span><span role="cell">ARM64 的 .js</span></div>
+        <div role="row"><span role="cell"><code>armv7l</code> / <code>armv8l</code></span><span role="cell">ARM32 的 .js</span></div>
+      </div>
+      <p class="note">只导入一种架构。宿主里所有插件合计大约 5 MiB。<code>armv8l</code> 不能改用 ARM64 包。已有 <code>/data/ufi-gate</code> 状态请保留。</p>
+    </div>
+  </section>
+
+  <section class="section" id="stats">
+    <div class="section-head">
+      <h2>项目数据</h2>
+      <p>星标、复刻、关注、议题和下载次数来自 GitHub 公开接口。浏览和克隆由仓库里的定时任务累积，公开页面读不到那 14 天的流量接口。</p>
+    </div>
+    <div class="stat-grid">
+      <article class="stat" id="stat-stars"><div class="stat-value">…</div><div class="stat-detail">星标</div></article>
+      <article class="stat" id="stat-forks"><div class="stat-value">…</div><div class="stat-detail">复刻</div></article>
+      <article class="stat" id="stat-watchers"><div class="stat-value">…</div><div class="stat-detail">关注</div></article>
+      <article class="stat" id="stat-issues"><div class="stat-value">…</div><div class="stat-detail">未关闭议题</div></article>
+      <article class="stat" id="stat-downloads"><div class="stat-value">…</div><div class="stat-detail">发布下载</div></article>
+      <article class="stat" id="stat-version"><div class="stat-value">…</div><div class="stat-detail">最新版本</div></article>
+      <article class="stat" id="stat-updated"><div class="stat-value">…</div><div class="stat-detail">最近更新</div></article>
+      <article class="stat" id="stat-site">
+        <img id="visit-badge" alt="官网访问次数" width="96" height="20" src="https://visitor-badge.laobi.icu/badge?page_id=nanbeiluduo.UFI-Gate&amp;left_text=visits&amp;left_color=%230067c0&amp;right_color=%2317263b">
+        <div class="stat-detail">官网访问</div>
+      </article>
+      <article class="stat" id="stat-views"><div class="stat-value">…</div><div class="stat-detail">仓库浏览</div></article>
+      <article class="stat" id="stat-clones"><div class="stat-value">…</div><div class="stat-detail">仓库克隆</div></article>
+    </div>
+    <article class="traffic-card">
+      <div class="row between">
+        <h3>浏览与克隆</h3>
+        <span class="muted">历史累积，不限于最近 14 天</span>
+      </div>
+      <div id="traffic-panel"><p class="muted">正在读取流量历史…</p></div>
+    </article>
+  </section>
+
+  <section class="demo-cta">
+    <div>
+      <p class="kicker">在线体验</p>
+      <h2>不用设备，也能把认证走一遍</h2>
+      <p>在手机、平板、电脑和管理后台之间切换。改认证方式、配额和黑白名单，再模拟一台手机连上热点，看认证页、审批和用量如何变化。数据只留在这台浏览器里。</p>
+    </div>
+    <a class="btn primary" href="demo.html">打开演示</a>
+  </section>
+
+  <section class="section split">
+    <article>
+      <h2>端口</h2>
+      <table>
+        <thead><tr><th>端口</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>8090</code></td><td>访客认证门户。避开设备官方后台常用的 8080。</td></tr>
+          <tr><td><code>8081</code></td><td>管理后台。初始化完成后只允许管理员设备访问。</td></tr>
+          <tr><td><code>8091</code></td><td>可选的远程审批入口，只监听 127.0.0.1。</td></tr>
+          <tr><td><code>5354</code></td><td>本地 DNS 应答，把探测引向门户。</td></tr>
+        </tbody>
+      </table>
+    </article>
+    <article>
+      <h2>使用前需要知道</h2>
+      <ul class="limits">
+        <li>需要已 root 的 ARM32 或 ARM64 Android 随身 WiFi，以及 UFI-TOOLS 设备端完整版。</li>
+        <li>未认证的 HTTPS 不能无证书警告地跳进门户。认证页来自系统的“登录网络”、普通 HTTP，或你手动打开门户。</li>
+        <li>流量大约每 5 秒采样一次，包含协议开销，不是运营商账单。</li>
+        <li>远程审批要自己准备 HTTPS 隧道。不要把 8081 后台或 Root Shell 暴露到公网。</li>
+      </ul>
+      <p><a href="https://github.com/nanbeiluduo/UFI-Gate/blob/main/docs/INSTALL.md">安装与管理指南</a></p>
+    </article>
+  </section>
+</main>
+
+<footer class="footer">
+  <div>
+    <a class="brand" href="./"><img src="assets/logo.png" alt="" width="28" height="28"><span>UFI-Gate</span></a>
+    <p>独立插件，与 UFI-TOOLS 上游没有隶属关系。</p>
+  </div>
+  <nav aria-label="页脚">
+    <a href="https://github.com/nanbeiluduo/UFI-Gate">仓库</a>
+    <a href="https://github.com/nanbeiluduo/UFI-Gate/releases">发布</a>
+    <a href="https://github.com/nanbeiluduo/UFI-Gate/issues">反馈</a>
+    <a href="https://t.me/nanbeiluduo">Telegram</a>
+    <a href="demo.html">在线体验</a>
+  </nav>
+</footer>
+<script src="js/theme.js"></script>
+<script src="js/github.js"></script>
+<script>
+document.getElementById('nav-toggle').addEventListener('click', function () {
+  var open = document.body.classList.toggle('nav-open');
+  this.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+</script>
+</body>
+</html>

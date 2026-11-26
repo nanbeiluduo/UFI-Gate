@@ -15,6 +15,8 @@ WiFi Captive Portal · 设备准入 · 流量配额
 
 **当前版本：`1.2.3`。** 新增门户页面设计器，让管理员可视化美化认证首页、等待审批、认证成功与访问受限页面。本版不包含广告功能。
 
+**官网与在线体验：** [https://nanbeiluduo.github.io/UFI-Gate/](https://nanbeiluduo.github.io/UFI-Gate/) — 功能介绍、最新安装包、项目数据，以及不用真机就能走通认证和审批的浏览器演示。
+
 ## 下载与安装
 
 ### 安装包架构选择
@@ -184,6 +186,9 @@ node tests/ui-test.cjs
 | `branding.go` | 自定义 Logo 校验、网站图标输出与默认图标回退 |
 | `firewall.go` / `dns.go` | IPv4 准入、流量计数、限速、管理员设备访问规则、DNS 与域名规则 |
 | `web/` | 管理后台与访客认证页，包含 Logo 设置、管理员设备管理和独立限速操作 |
+| `site/` | 官网与在线演示。GitHub Pages 发布这个目录 |
+| `.github/workflows/pages.yml` | 把 `site/` 部署到 GitHub Pages |
+| `.github/workflows/traffic.yml` | 定期把仓库浏览量与克隆数累积进 `site/data/traffic.json` |
 | `plugin.template.js` | UFI-TOOLS 插件与内嵌服务安装器模板，包含管理员重置确认入口 |
 | `service.sh` | 服务常驻、开机启动、停止与卸载 |
 | `emergency-recover.sh` | 紧急恢复网络脚本 |

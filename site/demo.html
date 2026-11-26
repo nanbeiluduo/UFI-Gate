@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>在线体验 · UFI-Gate</title>
+<meta name="description" content="在浏览器里试用 UFI-Gate 的认证门户和管理后台。不连接真实设备。">
+<link rel="icon" href="assets/logo.png">
+<script>
+try {
+  var theme = localStorage.getItem('ufi-site-theme');
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+} catch (e) {}
+</script>
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/demo.css">
+</head>
+<body class="demo-body">
+<a class="skip" href="#stage">跳到演示</a>
+<header class="nav">
+  <a class="brand" href="./">
+    <img src="assets/logo.png" alt="" width="32" height="32">
+    <span>UFI-Gate</span>
+  </a>
+  <div class="nav-panel" id="nav-panel">
+    <nav class="nav-links" aria-label="页内">
+      <a href="./">官网</a>
+      <a href="./#download">下载</a>
+    </nav>
+    <div class="nav-tools">
+      <span class="demo-pill">浏览器演示 · 不连接真实设备</span>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换主题"><span class="theme-ico" aria-hidden="true"></span></button>
+      <button class="btn ghost" id="reset-btn" type="button">重置演示</button>
+    </div>
+  </div>
+</header>
+
+<main class="demo-main">
+  <aside class="guide">
+    <p class="kicker">建议这样试</p>
+    <h1>把一台手机送进认证页</h1>
+    <ol class="guide-list">
+      <li>管理后台的初始账号是 <strong>admin / admin123</strong>。访客账号是 <strong>guest / wifi2026</strong>。</li>
+      <li>选择手机，连接热点。认证页会换成账号、验证码或申请上网。</li>
+      <li>若提交申请，切到管理后台，在审批中心或右下角消息里同意。</li>
+      <li>回到手机应看到连接成功。打开「模拟上网」，配额大约按每秒 20 MiB 增加，这是为了看清限速和断网。</li>
+    </ol>
+    <ul class="steps" id="steps"></ul>
+    <p class="note">页面和字段对齐真实的门户与后台。防火墙、推送和穿透都不会真的发出去。恢复密钥演示值为 DEMO-KEY。</p>
+  </aside>
+
+  <section class="workspace" id="stage">
+    <div class="toolbar" role="toolbar" aria-label="演示操作">
+      <div class="segment" role="group" aria-label="画面">
+        <button type="button" data-frame-btn="phone" class="active" aria-pressed="true">手机</button>
+        <button type="button" data-frame-btn="tablet" aria-pressed="false">平板</button>
+        <button type="button" data-frame-btn="pc" aria-pressed="false">电脑</button>
+        <button type="button" data-frame-btn="admin" aria-pressed="false">管理后台</button>
+        <button type="button" data-frame-btn="split" aria-pressed="false">对照</button>
+      </div>
+      <label class="target">操作对象
+        <select id="target">
+          <option value="phone">手机 · 小米 14</option>
+          <option value="tablet">平板 · iPad</option>
+          <option value="pc">电脑 · 客厅电脑</option>
+        </select>
+      </label>
+      <span class="link-state" id="link-state">未连接</span>
+      <div class="toolbar-actions">
+        <button type="button" id="connect-btn">连接热点</button>
+        <button type="button" id="disconnect-btn">断开</button>
+        <button type="button" id="browse-btn">访问网站</button>
+        <button type="button" id="white-btn">白名单</button>
+        <button type="button" id="black-btn">黑名单</button>
+        <button type="button" id="sim-btn" aria-pressed="false">模拟上网</button>
+      </div>
+    </div>
+
+    <div class="stage" id="stage-frames">
+      <div class="slot" data-frame="phone">
+        <div class="bezel-wrap" data-w="390" data-h="780" style="--w:390;--h:780">
+          <div class="bezel phone">
+            <div class="bezel-bar"><i></i><span>UFI-WiFi</span></div>
+            <iframe title="手机访客认证页" src="frames/portal.html?client=phone"></iframe>
+          </div>
+        </div>
+      </div>
+      <div class="slot" data-frame="tablet" hidden>
+        <div class="bezel-wrap" data-w="834" data-h="760" style="--w:834;--h:760">
+          <div class="bezel tablet">
+            <div class="bezel-bar"><span>UFI-WiFi · 平板</span></div>
+            <iframe title="平板访客认证页" src="frames/portal.html?client=tablet"></iframe>
+          </div>
+        </div>
+      </div>
+      <div class="slot" data-frame="pc" hidden>
+        <div class="bezel-wrap" data-w="1100" data-h="720" style="--w:1100;--h:720">
+          <div class="bezel desktop">
+            <div class="bezel-bar"><span class="dots" aria-hidden="true"></span><span class="url">http://192.168.0.1:8090/</span></div>
+            <iframe title="电脑访客认证页" src="frames/portal.html?client=pc"></iframe>
+          </div>
+        </div>
+      </div>
+      <div class="slot" data-frame="admin" hidden>
+        <div class="bezel-wrap" data-w="1180" data-h="760" style="--w:1180;--h:760">
+          <div class="bezel desktop admin">
+            <div class="bezel-bar"><span class="dots" aria-hidden="true"></span><span class="url">http://192.168.0.1:8081/</span></div>
+            <iframe title="管理后台" src="frames/admin.html"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="js/theme.js"></script>
+<script src="js/demo-store.js"></script>
+<script src="js/demo.js"></script>
+</body>
+</html>

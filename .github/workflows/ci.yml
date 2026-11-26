@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'site/data/traffic.json'
   pull_request:
   workflow_dispatch:
 
@@ -35,6 +37,14 @@ jobs:
           node --check web/recovery.js
           node --check web/portal.js
           node --check tests/ui-test.cjs
+          node --check site/js/github.js
+          node --check site/js/theme.js
+          node --check site/js/demo-store.js
+          node --check site/js/demo.js
+          node --check site/frames/portal.js
+          node --check site/frames/admin.js
+          node --check tests/site-demo-test.cjs
+          python3 scripts/update_traffic.py --self-test
           sh -n service.sh
           sh -n emergency-recover.sh
       - name: Build and verify ARM32 and ARM64 plugins

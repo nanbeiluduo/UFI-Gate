@@ -1,0 +1,70 @@
+# Records GitHub traffic views/clones into site/data/traffic.json.
+#
+# The public traffic API keeps about 14 days and requires a token with push
+# access. This job tries secrets.TRAFFIC_TOKEN first, then the built-in
+# GITHUB_TOKEN. GITHUB_TOKEN usually receives 403. The site still works: the
+# chart stays empty until a row is actually stored.
+#
+# Enable it (optional):
+# 1. Create a classic PAT with the repo scope, or a fine-grained PAT that can
+#    read Administration (traffic) and write Contents on this repository.
+# 2. Repo Settings → Secrets and variables → Actions → New repository secret
+#    named TRAFFIC_TOKEN.
+# 3. Actions → Traffic history → Run workflow, to confirm a commit appears.
+#
+# A push made with GITHUB_TOKEN does not start other workflows, so this job
+# dispatches GitHub Pages itself when TRAFFIC_TOKEN is unset. A PAT push
+# updates main and the Pages workflow starts from that push.
+
+name: Traffic history
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: traffic-history
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    env:
+      HAS_PAT: ${{ secrets.TRAFFIC_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          token: ${{ secrets.TRAFFIC_TOKEN || github.token }}
+
+      - name: Fetch traffic and merge history
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/update_traffic.py
+
+      - name: Commit history when it changed
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/data/traffic.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "chore: record GitHub traffic history"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Pages after a GITHUB_TOKEN commit
+        if: steps.commit.outputs.changed == 'true' && env.HAS_PAT != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref "${{ github.ref_name }}"

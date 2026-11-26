@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFI-Gate · 网络管理</title>
+<script>
+try {
+  var theme = localStorage.getItem('ufi-site-theme');
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+} catch (e) {}
+</script>
+<link rel="icon" href="../assets/logo.png">
+<link rel="stylesheet" href="../css/plugin.css">
+<link rel="stylesheet" href="../css/frame.css">
+</head>
+<body class="admin-page">
+<div id="root"></div>
+<dialog id="dialog"></dialog>
+<dialog id="inbox-box" class="message-box"></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="../js/demo-store.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

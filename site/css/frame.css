@@ -1,0 +1,13 @@
+html,body{height:100%}
+body.admin-page,body.admin-page #root{height:100%;min-height:0;overflow:hidden}
+.admin-page .app{height:100%;min-height:0;overflow:hidden}
+.admin-page .sidebar{height:100%;max-height:100%}
+.admin-page .main{height:100%;min-height:0;overflow:auto}
+.checkline{display:flex;gap:8px;align-items:center;font-weight:600}
+.checkline input{width:18px;margin:0}
+#root[data-anim="1"] .auth-card{animation:ufi-pop .35s ease}
+@keyframes ufi-pop{from{transform:translateY(10px);opacity:.01}to{transform:none;opacity:1}}
+.captcha canvas{width:180px;height:60px;border-radius:6px;cursor:pointer;background:#eef3f9}
+html[data-theme="dark"] .captcha canvas{background:#1c2836}
+.button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+@media (prefers-reduced-motion:reduce){#root[data-anim="1"] .auth-card{animation:none}}
