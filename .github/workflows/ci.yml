@@ -35,6 +35,12 @@ jobs:
           node --check web/recovery.js
           node --check web/portal.js
           node --check tests/ui-test.cjs
+          node --check site/js/engine.js
+          node --check site/js/sim.js
+          node --check site/js/github.js
+          node --check site/js/demo.js
+          node --check site/js/theme.js
+          node tests/site-demo.test.cjs
           sh -n service.sh
           sh -n emergency-recover.sh
       - name: Build and verify ARM32 and ARM64 plugins

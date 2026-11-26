@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>在线体验 · UFI-Gate</title>
+  <meta name="description" content="在浏览器里试用 UFI-Gate 的认证门户和管理后台。">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/demo.css">
+  <script>
+    try {
+      var theme = localStorage.getItem('ufi-site-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+  </script>
+</head>
+<body class="demo-page">
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/logo.png" alt="">UFI-Gate</a>
+      <nav class="nav" aria-label="页内">
+        <a href="./">首页</a>
+        <a href="./#download">下载</a>
+        <a href="./#docs">文档</a>
+      </nav>
+      <div class="header-actions">
+        <button type="button" id="theme-toggle">深色</button>
+        <a class="star" href="https://github.com/nanbeiluduo/UFI-Gate" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+          <span class="word">Star</span>
+          <b data-star>…</b>
+        </a>
+      </div>
+    </div>
+  </header>
+  <div class="demo-banner">
+    <div><strong>浏览器演示。</strong> 不会连接真实随身 WiFi，也不会改系统网络。配置、设备和审批只保存在这台浏览器里。</div>
+    <span id="auth-line"></span>
+  </div>
+  <div class="studio">
+    <div class="studio-body">
+      <aside class="rail">
+        <h2>看哪一块屏幕</h2>
+        <div class="modes" id="modes">
+          <button type="button" data-mode="pc">电脑</button>
+          <button type="button" data-mode="admin">管理后台</button>
+          <button type="button" data-mode="phone" aria-pressed="true">手机</button>
+          <button type="button" data-mode="tablet">平板</button>
+        </div>
+        <h2>让设备动起来</h2>
+        <p class="quiet" id="act-who"></p>
+        <div class="stack-btns">
+          <button type="button" id="act-connect">连接热点</button>
+        </div>
+        <p class="note">连接之后，未认证的设备会看到和真机一样的门户。</p>
+        <h2>模拟上网流量</h2>
+        <div class="stack-btns" id="traffic">
+          <button type="button" data-mb="30">30 MiB</button>
+          <button type="button" data-mb="120">120 MiB</button>
+          <button type="button" data-mb="full">直到超过配额</button>
+        </div>
+        <h2>打开一个地址</h2>
+        <form class="visit-form" id="visit-form">
+          <input id="host" name="host" placeholder="example.com" value="example.com" autocomplete="off">
+          <button type="submit">打开</button>
+        </form>
+        <p class="note">试试 ads.example.com（黑名单）和 captive.apple.com（白名单）。</p>
+        <p id="rail-status" role="status"></p>
+        <h2>演示账号</h2>
+        <div class="creds">
+          <div><span>管理员</span><code>admin / Admin1234</code></div>
+          <div><span>访客</span><code>guest / wifi2026</code></div>
+          <div><span>恢复密钥</span><code>DEMO-RECOVERY-KEY</code></div>
+        </div>
+        <h2>推送预览</h2>
+        <div id="inbox"></div>
+        <h2>可以顺着试</h2>
+        <ol id="steps"></ol>
+        <p><button type="button" id="reset-demo">重置演示数据</button></p>
+      </aside>
+      <div class="stage" id="stage">
+        <p class="frame-label" id="frame-label">手机 · 认证门户</p>
+        <div id="bezel-wrap">
+          <div id="bezel" data-kind="phone">
+            <iframe id="screen" title="UFI-Gate 演示画面" src="about:blank"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="js/theme.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/github.js"></script>
+  <script src="js/demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+/* Let the site theme override the portal's prefers-color-scheme rules. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fb;
+  --card: #ffffffdf;
+  --ink: #17263b;
+  --muted: #66788c;
+  --line: #dce4ed;
+  --good: #087d51;
+  --bad: #bc2b38;
+  --orange: #a86709;
+  --shadow: 0 6px 22px #223c6410;
+}
+html[data-theme="light"] body {
+  background: radial-gradient(ellipse at 5% 5%, #dfeeff 0, transparent 47%), radial-gradient(ellipse at 98% 95%, #f0e8ff 0, transparent 50%), var(--bg);
+  color: var(--ink);
+}
+html[data-theme="light"] .card { border-color: #ffffff70; }
+html[data-theme="light"] .sidebar { background: #e8f0fa88; }
+html[data-theme="light"] .tag { background: #e9eef5; color: var(--muted); }
+html[data-theme="light"] .tag.online,
+html[data-theme="light"] .tag.allow { background: #def5e9; color: var(--good); }
+html[data-theme="light"] .tag.limited,
+html[data-theme="light"] .tag.pending { background: #fff0d5; color: var(--orange); }
+html[data-theme="light"] .tag.quota,
+html[data-theme="light"] .tag.blocked,
+html[data-theme="light"] .tag.deny { background: #fde5e6; color: var(--bad); }
+html[data-theme="light"] .notice { background: #fff0d5; color: #8c590c; }
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151d28;
+  --card: #253041e8;
+  --ink: #e8edf4;
+  --muted: #a2b0c1;
+  --line: #3b485a;
+  --good: #64dba5;
+  --bad: #ff94a2;
+  --orange: #ffd490;
+}
+html[data-theme="dark"] body {
+  background: radial-gradient(ellipse at 5% 5%, #122f50 0, transparent 50%), radial-gradient(ellipse at 98% 95%, #292444 0, transparent 45%), var(--bg);
+  color: var(--ink);
+}
+html[data-theme="dark"] .card { border-color: #ffffff0a; }
+html[data-theme="dark"] .sidebar { background: #192433c9; }
+html[data-theme="dark"] .tag { background: #364253; color: var(--muted); }
+html[data-theme="dark"] .tag.online,
+html[data-theme="dark"] .tag.allow { background: #173f31; color: var(--good); }
+html[data-theme="dark"] .tag.limited,
+html[data-theme="dark"] .tag.pending { background: #4a3b21; color: var(--orange); }
+html[data-theme="dark"] .tag.quota,
+html[data-theme="dark"] .tag.blocked,
+html[data-theme="dark"] .tag.deny { background: #512d36; color: var(--bad); }
+html[data-theme="dark"] .notice { background: #403524; color: #ffd18c; }
