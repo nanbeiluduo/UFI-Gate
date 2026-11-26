@@ -15,6 +15,8 @@ WiFi Captive Portal · 设备准入 · 流量配额
 
 **当前版本：`1.2.3`。** 新增门户页面设计器，让管理员可视化美化认证首页、等待审批、认证成功与访问受限页面。本版不包含广告功能。
 
+官网与在线演示：<https://nanbeiluduo.github.io/UFI-Gate/> 。可以在浏览器里试用认证门户和管理后台，无需设备。
+
 ## 下载与安装
 
 ### 安装包架构选择
@@ -193,6 +195,7 @@ node tests/ui-test.cjs
 | `scripts/` | Release 源码打包、安装包校验与 SHA-256 校验清单生成 |
 | `.github/workflows/` | CI 检查、双架构构建、QEMU 测试与 Release 自动发布 |
 | `docs/` | 安装指南、功能说明、测试记录与版本发布说明 |
+| `site/` | 官网与交互演示的静态页面，由 GitHub Actions 发布到 GitHub Pages |
 
 GitHub Actions 自动运行 Go 测试、静态与语法检查、双架构构建、安装器校验及 QEMU 测试。浏览器交互测试目前需单独运行。
 
